@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f4f1ea;
+  --ink: #1c2430;
+  --muted: #5c6a78;
+  --line: #e3dcd0;
+  --card: #fffdf8;
+  --job: #0e7a49;
+  --job-soft: #e6f6ee;
+  --lead: #1e4f93;
+  --lead-soft: #e7f0fb;
+  --place: #9a6708;
+  --place-soft: #fbf3dc;
+  --brand: #0f6b52;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-card: var(--card);
+  --color-job: var(--job);
+  --color-job-soft: var(--job-soft);
+  --color-lead: var(--lead);
+  --color-lead-soft: var(--lead-soft);
+  --color-place: var(--place);
+  --color-place-soft: var(--place-soft);
+  --color-brand: var(--brand);
+  --font-sans: var(--font-outfit), "Segoe UI", sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: var(--brand);
+}
+
+.map-root,
+.map-root .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #e4ecdf;
+  font-family: inherit;
+}
+
+.pin-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.pin {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(28, 36, 48, 0.35);
+}
+
+.pin-job {
+  background: #0e7a49;
+}
+
+.pin-lead {
+  background: #1e4f93;
+}
+
+.pin-place {
+  background: #e0a106;
+}
+
+.pin-selected {
+  width: 24px;
+  height: 24px;
+  box-shadow:
+    0 0 0 4px rgba(15, 107, 82, 0.28),
+    0 1px 4px rgba(28, 36, 48, 0.35);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #fffdf8;
+  color: #1c2430;
+  box-shadow: 0 10px 24px rgba(28, 36, 48, 0.16);
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+}
+
+.leaflet-popup-content {
+  margin: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.leaflet-popup-content a {
+  color: #0f6b52;
+  font-weight: 600;
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.85rem;
+  border: 1px solid var(--line);
+  background: var(--card);
+  padding: 0.7rem 0.85rem;
+  color: var(--ink);
+}
+
+.field:focus {
+  border-color: var(--brand);
+}
