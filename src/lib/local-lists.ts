@@ -58,6 +58,14 @@ export function toggleSavedJob(id: string): boolean {
   return !saved;
 }
 
+export function useClientReady() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+}
+
 function subscribe(onStoreChange: () => void) {
   window.addEventListener("jobrador-storage", onStoreChange);
   window.addEventListener("storage", onStoreChange);
@@ -85,6 +93,26 @@ function routeSnapshotFromStorage(): RouteStop[] {
 
 export function useRoute(): RouteStop[] {
   return useSyncExternalStore(subscribe, routeSnapshotFromStorage, () => routeSnapshot);
+}
+
+let savedSnapshot: string[] = [];
+let savedRaw: string | null = null;
+
+function savedSnapshotFromStorage(): string[] {
+  const raw = window.localStorage.getItem(SAVED_KEY);
+  if (raw === savedRaw) return savedSnapshot;
+  savedRaw = raw;
+  try {
+    const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+    savedSnapshot = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    savedSnapshot = [];
+  }
+  return savedSnapshot;
+}
+
+export function useSavedJobs(): string[] {
+  return useSyncExternalStore(subscribe, savedSnapshotFromStorage, () => savedSnapshot);
 }
 
 export function useJobSaved(id: string): boolean {

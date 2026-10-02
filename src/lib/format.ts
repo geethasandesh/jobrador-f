@@ -4,6 +4,12 @@ export function formatDistance(km: number): string {
   return `${km.toFixed(digits)} km`;
 }
 
+export function compactDistance(km: number): string {
+  if (km < 1) return `${Math.max(50, Math.round(km * 1000))}m`;
+  const digits = km < 10 ? 1 : 0;
+  return `${km.toFixed(digits)}km`;
+}
+
 export function formatWhen(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const then = Date.parse(iso);

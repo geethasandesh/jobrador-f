@@ -1,6 +1,6 @@
 # jobrador-f
 
-Website for Student Job Map. It renders the map, filters, and pages. It never talks to the database. Every fact comes from the API in `jobrador-b`.
+Website for jobrador. It renders the map, filters, and pages. It never talks to the database. Every fact comes from the API in `jobrador-b`.
 
 ## Run
 
