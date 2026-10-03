@@ -303,8 +303,8 @@ export function ExploreScreen() {
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-white px-6 py-3 sm:px-10 md:px-16">
-      <div className="mb-3 flex items-center gap-2">
+    <div className="flex h-dvh flex-col overflow-hidden bg-white px-3 py-2 sm:px-10 sm:py-3 md:px-16">
+      <div className="mb-2 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:items-center">
         <div className="hidden shrink-0 sm:block">
           <Logo compact />
         </div>
@@ -374,7 +374,7 @@ export function ExploreScreen() {
           </ul>
         ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
           <button
             type="button"
             onClick={() => {
@@ -383,7 +383,7 @@ export function ExploreScreen() {
               setPinnedKind(null);
               setPanel("post");
             }}
-            className={`inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm ${panel === "post" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm ${panel === "post" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
           >
             <BriefcaseIcon />
             <span className="hidden sm:inline">Post a job</span>
@@ -397,7 +397,7 @@ export function ExploreScreen() {
               setPinnedKind(null);
               setPanel("report");
             }}
-            className={`inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm ${panel === "report" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
+            className={`hidden shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm sm:inline-flex ${panel === "report" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
           >
             <FlagIcon />
             <span className="hidden sm:inline">Share a tip</span>
@@ -416,14 +416,14 @@ export function ExploreScreen() {
               setSavedOnly(true);
               setPanel("list");
             }}
-            className="rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm"
+            className="shrink-0 rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm"
           >
             Saved <span className="text-muted">{savedCount}</span>
           </button>
           <button
             type="button"
             onClick={() => togglePanel("visits")}
-            className="rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm"
+            className="hidden shrink-0 rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm sm:inline-flex"
           >
             Visit list <span className="text-muted">{visitCount}</span>
           </button>
@@ -433,7 +433,7 @@ export function ExploreScreen() {
               onClick={() => {
                 void signOut().then(() => router.push("/"));
               }}
-              className="rounded-full bg-ink px-3 py-2 text-sm font-medium text-white shadow-sm"
+              className="shrink-0 rounded-full bg-ink px-3 py-2 text-sm font-medium text-white shadow-sm"
             >
               Log out
             </button>
@@ -442,7 +442,7 @@ export function ExploreScreen() {
       </div>
 
       <AppContainer className="min-h-0 flex-1">
-      <div className="relative h-full min-h-0 bg-[#efeae3]">
+      <div className="explore-map relative h-full min-h-0 bg-[#efeae3]">
       <MapCanvas
         center={{ latitude, longitude }}
         radiusKm={Number.isFinite(radiusKm) ? radiusKm : 5}
@@ -473,7 +473,7 @@ export function ExploreScreen() {
         }}
       />
 
-      <div className="absolute left-1/2 top-4 z-[700] flex -translate-x-1/2 flex-col items-center gap-2">
+      <div className="absolute inset-x-3 top-3 z-[700] flex flex-col items-center gap-2 sm:inset-x-24 sm:top-4">
         <MapToast message={toast} />
         <SampleBanner dataSource={data?.dataSource} />
         {searching ? (
@@ -518,7 +518,7 @@ export function ExploreScreen() {
       </nav>
 
       {panel ? (
-        <aside className="absolute top-4 bottom-24 left-3 z-[700] flex w-[min(100%-1.5rem,360px)] flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:bottom-6 sm:left-24">
+        <aside className="absolute inset-x-2 top-2 bottom-20 z-[700] flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:inset-x-auto sm:top-4 sm:bottom-6 sm:left-24 sm:w-[min(100%-1.5rem,360px)]">
           {panel === "post" ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between px-4 pt-4">

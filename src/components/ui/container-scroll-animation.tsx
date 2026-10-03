@@ -51,7 +51,7 @@ export function ContainerScroll({
   useEffect(() => {
     const measure = () => {
       const cardHeight = (isMobile ? 32 : 38) * 16;
-      const headerHeight = 72;
+      const headerHeight = isMobile ? 56 : 72;
       const visible = cardHeight * 0.3;
       const top = window.innerHeight - visible - headerHeight;
       const endTop = Math.max(96, Math.min(top, (window.innerHeight - cardHeight) / 2));

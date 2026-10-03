@@ -9,10 +9,10 @@ const links = [
 
 export function LegalLinks({ className = "" }: { className?: string }) {
   return (
-    <p className={`text-[0.95rem] text-[#3a3a3a] ${className}`}>
+    <p className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[0.95rem] text-[#3a3a3a] ${className}`}>
       {links.map((link, index) => (
         <span key={link.href}>
-          {index > 0 ? <span className="mx-2">·</span> : null}
+          {index > 0 ? <span aria-hidden>·</span> : null}
           <Link href={link.href} className="underline decoration-ink/40 underline-offset-[3px] hover:text-ink">
             {link.label}
           </Link>

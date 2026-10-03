@@ -100,27 +100,29 @@ export function LandingMap() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 bg-white p-3 sm:p-4">
-      <div className="flex shrink-0 items-center gap-2">
-        <div className="hidden shrink-0 sm:block">
-          <Logo compact />
+    <div className="flex h-full min-h-0 flex-col gap-2 bg-white p-2 sm:gap-3 sm:p-4">
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="hidden shrink-0 sm:block">
+            <Logo compact />
+          </div>
+          <form onSubmit={search} className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]">
+            <span className="sr-only">Search jobs</span>
+            <SearchIcon />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search jobs, places, or areas"
+              className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
+            />
+          </form>
         </div>
-        <form onSubmit={search} className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]">
-          <span className="sr-only">Search jobs</span>
-          <SearchIcon />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search jobs, places, or areas"
-            className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
-          />
-        </form>
         <div className="flex shrink-0 items-center gap-2">
           <button type="button" onClick={() => openMap("/map?panel=saved")} className="rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm">
             Saved <span className="text-muted">{savedCount}</span>
           </button>
           <button type="button" onClick={() => openMap("/map?panel=visits")} className="rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm">
-            Visit list <span className="text-muted">{visitCount}</span>
+            Visits <span className="text-muted">{visitCount}</span>
           </button>
         </div>
       </div>
@@ -133,7 +135,7 @@ export function LandingMap() {
               selectedId={selectedId}
               onSelect={setSelectedId}
             />
-            <div className="absolute left-1/2 top-4 z-[700] flex -translate-x-1/2 flex-col items-center gap-2">
+            <div className="absolute inset-x-3 top-3 z-[700] flex flex-col items-center gap-2 sm:inset-x-16 sm:top-4">
               <MapToast message={toast} />
               <SampleBanner dataSource={dataSource} />
             </div>
@@ -170,7 +172,7 @@ function PreviewCard({ item, onOpen, onClose }: { item: Opportunity; onOpen: () 
     .toUpperCase();
 
   return (
-    <article className="absolute top-4 right-3 z-[700] w-[min(100%-1.5rem,320px)] overflow-hidden rounded-2xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.18)] sm:right-4">
+    <article className="absolute inset-x-2 bottom-2 z-[700] max-h-[46%] overflow-y-auto rounded-2xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.18)] sm:inset-x-auto sm:top-4 sm:right-4 sm:bottom-auto sm:max-h-none sm:w-[min(100%-1.5rem,320px)]">
       <div className={`${status.className} py-1.5 text-center text-[11px] font-bold tracking-[0.14em] text-white`}>
         {status.label}
       </div>

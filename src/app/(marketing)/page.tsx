@@ -37,7 +37,7 @@ export default function HomePage() {
                 Beta 1.0 · Berlin only
               </span>
             </p>
-            <h1 className="text-center text-[2.7rem] font-black leading-[0.96] tracking-[-0.045em] text-ink sm:text-7xl">
+            <h1 className="text-center text-[clamp(1.7rem,7.2vw,2.7rem)] font-black leading-[0.96] tracking-[-0.045em] text-ink sm:text-6xl lg:text-7xl">
               <span className="block">
                 Finding <span className="text-[#d5d5d5]">your next</span>
               </span>
@@ -84,16 +84,13 @@ export default function HomePage() {
           {listingLines.map((line) => (
             <li
               key={line.phrase}
-              className="flex items-baseline justify-center gap-[0.4em] overflow-hidden whitespace-nowrap text-[1.15rem] font-medium text-[#ececec] sm:text-[1.45rem]"
-              style={{
-                maskImage: "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)",
-              }}
+              className="flex flex-wrap items-baseline justify-center gap-x-[0.35em] gap-y-0 text-center text-[1.05rem] font-medium leading-snug text-[#9a9a9a] sm:flex-nowrap sm:overflow-hidden sm:whitespace-nowrap sm:text-[1.45rem] sm:text-[#ececec] sm:[mask-image:linear-gradient(90deg,transparent,#000_14%,#000_86%,transparent)]"
             >
-              <span className="blur-[1.4px]">{line.before}</span>
+              <span className="sm:blur-[1.4px]">{line.before}</span>
               <span className={`${serifItalic.className} relative text-[1.35em] leading-none tracking-[-0.03em] text-ink blur-none`}>
                 {line.phrase}
               </span>
-              <span className="blur-[1.4px]">{line.after}</span>
+              <span className="sm:blur-[1.4px]">{line.after}</span>
             </li>
           ))}
         </ul>

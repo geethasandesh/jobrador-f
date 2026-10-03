@@ -95,16 +95,10 @@ export function StudentWall({ children }: { children: ReactNode }) {
 
   return (
     <WallContext.Provider value={{ reactionsFor: (id) => examples[id] ?? EMPTY_REACTIONS, react }}>
-    <div id="student-wall" className="relative mt-10 w-full scroll-mt-24 sm:mt-14">
-      <div className="mx-auto grid w-full max-w-5xl grid-cols-2 gap-4 px-4 pr-[152px] sm:grid-cols-4 sm:gap-5 sm:px-6 sm:pr-[max(1.5rem,calc(14rem-(100vw-min(100vw,64rem))/2))]">
-        {children}
-        {featured.map((note, index) => (
-          <StuckNote key={note.id} note={note} tilt={tilt(index + 2)} onReact={applyReactions} />
-        ))}
-      </div>
+    <div id="student-wall" className="relative mt-10 w-full scroll-mt-24 overflow-x-clip sm:mt-14">
       {showPad ? (
           <article
-            className="absolute top-0 right-2 z-10 w-[136px] px-3 pb-3 pt-4 shadow-[0_12px_24px_rgba(20,20,20,0.22)] sm:right-4 sm:w-[188px]"
+            className="relative z-10 mx-4 mb-5 w-auto px-4 pb-4 pt-5 shadow-[0_12px_24px_rgba(20,20,20,0.22)] sm:absolute sm:top-0 sm:right-4 sm:mx-0 sm:mb-0 sm:w-[188px] sm:px-3 sm:pb-3 sm:pt-4"
             style={{ backgroundColor: draft.color }}
           >
             <Tape rotate={-8} />
@@ -154,6 +148,12 @@ export function StudentWall({ children }: { children: ReactNode }) {
             {error ? <p className="mt-2 text-xs font-medium text-ink">{error}</p> : null}
           </article>
       ) : null}
+      <div className={`mx-auto grid w-full max-w-5xl grid-cols-2 gap-3 px-4 sm:grid-cols-4 sm:gap-5 sm:px-6 ${showPad ? "sm:pr-[max(1.5rem,calc(14rem-(100vw-min(100vw,64rem))/2))]" : ""}`}>
+        {children}
+        {featured.map((note, index) => (
+          <StuckNote key={note.id} note={note} tilt={tilt(index + 2)} onReact={applyReactions} />
+        ))}
+      </div>
     </div>
     </WallContext.Provider>
   );
@@ -204,7 +204,7 @@ function ReactionRow({
   busy?: boolean;
 }) {
   return (
-    <div className="mt-auto flex items-end gap-2 pt-3">
+    <div className="mt-auto flex flex-wrap items-end gap-1.5 pt-3 sm:gap-2">
       {reactions.map((reaction) => (
         <button
           key={reaction.emoji}

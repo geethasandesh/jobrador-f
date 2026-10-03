@@ -34,6 +34,11 @@
   --font-serif: var(--font-outfit), "Segoe UI", sans-serif;
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: #fff;
   color: var(--ink);
@@ -156,6 +161,13 @@ textarea {
 .map-root .leaflet-bottom.leaflet-right {
   margin-right: 16px;
   margin-bottom: 24px;
+}
+
+@media (max-width: 639px) {
+  .explore-map .leaflet-bottom.leaflet-right {
+    margin-bottom: 4.75rem;
+    margin-right: 12px;
+  }
 }
 
 .field {
