@@ -93,12 +93,6 @@ export async function updatePassword(password: string) {
   if (error) throw new Error(message(error));
 }
 
-export async function accessToken(): Promise<string | null> {
-  if (!isAuthConfigured()) return null;
-  const { data } = await getSupabase().auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
 export async function signOut() {
   if (!isAuthConfigured()) return;
   const { error } = await getSupabase().auth.signOut();

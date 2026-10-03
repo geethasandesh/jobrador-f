@@ -5,7 +5,7 @@ import type {
   OpportunityList,
   SearchFilters,
 } from "./types";
-import { accessToken } from "../session";
+import { accessToken } from "../access-token";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
