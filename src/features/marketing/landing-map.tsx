@@ -35,6 +35,7 @@ export function LandingMap() {
   const [items, setItems] = useState<Opportunity[]>([]);
   const [dataSource, setDataSource] = useState<"mock" | "live" | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loginPath, setLoginPath] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,7 +73,7 @@ export function LandingMap() {
       router.push(path);
       return;
     }
-    router.push(`/login?next=${encodeURIComponent(path)}`);
+    setLoginPath(path);
   }
 
   const signedIn = Boolean(authReady && session);
@@ -116,7 +117,7 @@ export function LandingMap() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 bg-white p-2 sm:gap-3 sm:p-4">
+    <div className="relative flex h-full min-h-0 flex-col gap-2 bg-white p-2 sm:gap-3 sm:p-4">
       <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-center gap-2">
           <div className="hidden shrink-0 sm:block">
@@ -180,6 +181,26 @@ export function LandingMap() {
             </nav>
             {selected ? <PreviewCard item={selected} onOpen={() => openMap()} onClose={() => setSelectedId(null)} /> : null}
       </div>
+      {loginPath ? (
+        <div className="absolute inset-0 z-[800] grid place-items-center bg-[#0e1a2b]/45 p-4">
+          <div role="dialog" aria-labelledby="map-login-title" className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-[0_24px_60px_rgba(8,20,40,0.28)]">
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setLoginPath(null)} className="grid h-8 w-8 place-items-center rounded-full text-xl leading-none text-muted" aria-label="Close">
+                ×
+              </button>
+            </div>
+            <h2 id="map-login-title" className="text-2xl font-black tracking-tight">Log in to start</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">Search, pins, and the map open after you log in.</p>
+            <button
+              type="button"
+              onClick={() => router.push(`/login?next=${encodeURIComponent(loginPath)}`)}
+              className="mt-5 w-full rounded-full bg-ink py-3 text-sm font-semibold text-white"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
