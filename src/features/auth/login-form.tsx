@@ -25,14 +25,12 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const configured = isAuthConfigured();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setNotice(null);
     if (!configured) {
       setError("Add the Supabase anon key in jobrador-f/.env.local, then restart the site.");
       return;
@@ -44,12 +42,7 @@ export function LoginForm() {
     setPending(true);
     try {
       if (mode === "create") {
-        const signedIn = await signUp(email, password);
-        if (!signedIn) {
-          setNotice("Account created in Supabase. Confirm the email, then log in.");
-          setMode("login");
-          return;
-        }
+        await signUp(email, password);
       } else {
         await signIn(email, password);
       }
@@ -103,7 +96,6 @@ export function LoginForm() {
           </Link>
         ) : null}
         {error ? <p className="text-sm text-[#e11d48]">{error}</p> : null}
-        {notice ? <p className="text-sm text-muted">{notice}</p> : null}
         <button type="submit" disabled={pending} className="mt-2 w-full rounded-full bg-ink py-3 text-sm font-semibold text-white disabled:opacity-60">
           {pending ? "Please wait…" : mode === "create" ? "Create account" : "Login"}
         </button>
@@ -114,7 +106,6 @@ export function LoginForm() {
         onClick={() => {
           setMode(mode === "login" ? "create" : "login");
           setError(null);
-          setNotice(null);
         }}
       >
         {mode === "login" ? "Create an account" : "Already have an account? Login"}

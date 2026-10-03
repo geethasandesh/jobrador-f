@@ -44,20 +44,41 @@ export function StudentWall({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const id = deviceId();
-    getWallNotes(id)
-      .then((result) => {
-        setFeatured(result.notes.filter((note) => !note.id.startsWith("wall_ex_")));
-        setExamples(
-          Object.fromEntries(
-            result.notes.filter((note) => note.id.startsWith("wall_ex_")).map((note) => [note.id, note.reactions]),
-          ),
-        );
-      })
-      .catch(() => setFeatured([]))
-      .finally(() => setLoaded(true));
+    let cancelled = false;
+    function loadNotes() {
+      getWallNotes(id)
+        .then((result) => {
+          if (cancelled) return;
+          setFeatured(result.notes.filter((note) => !note.id.startsWith("wall_ex_")));
+          setExamples(
+            Object.fromEntries(
+              result.notes.filter((note) => note.id.startsWith("wall_ex_")).map((note) => [note.id, note.reactions]),
+            ),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setFeatured([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoaded(true);
+        });
+    }
+    loadNotes();
     getMyWallNote(id)
-      .then((result) => setMine(result.note))
-      .catch(() => setMine(null));
+      .then((result) => {
+        if (!cancelled) setMine(result.note);
+      })
+      .catch(() => {
+        if (!cancelled) setMine(null);
+      });
+    function onShow() {
+      if (document.visibilityState === "visible") loadNotes();
+    }
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onShow);
+    };
   }, []);
 
   async function stick() {
@@ -217,7 +238,7 @@ function ReactionRow({
         >
           {reaction.emoji}
           {reaction.count > 0 ? (
-            <span className={`font-semibold text-ink ${reaction.mine ? "text-sm" : "text-[0.65rem]"}`}>{reaction.count}</span>
+            <span className="text-xs font-bold text-ink">{reaction.count}</span>
           ) : null}
         </button>
       ))}

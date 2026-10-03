@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { accessToken } from "../access-token";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/+$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -40,13 +40,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError(0, "The API is not running. Start jobrador-b on port 4000.");
+    throw new ApiError(0, "The map service did not respond. Try again in a moment.");
   }
 
   if (!response.ok) {
     throw new ApiError(response.status, await failMessage(response));
   }
   return (await response.json()) as T;
+}
+
+export function registerAccount(email: string, password: string) {
+  return request<{ ok: true }>("/v1/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export function searchPlaces(query: string, signal?: AbortSignal) {

@@ -67,15 +67,31 @@ export function LandingMap() {
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
   function openMap(path = mapHref(DEFAULT_PLACE.latitude, DEFAULT_PLACE.longitude, DEFAULT_PLACE.label)) {
-    if (authReady && session) {
+    if (!authReady) return;
+    if (session) {
       router.push(path);
       return;
     }
     router.push(`/login?next=${encodeURIComponent(path)}`);
   }
 
+  const signedIn = Boolean(authReady && session);
+
+  function openPin(id: string) {
+    const item = items.find((entry) => entry.id === id);
+    if (!item) {
+      openMap();
+      return;
+    }
+    openMap(mapHref(item.latitude, item.longitude, item.area || item.businessName));
+  }
+
   function search(event: FormEvent) {
     event.preventDefault();
+    if (!signedIn) {
+      openMap();
+      return;
+    }
     const typed = query.trim();
     if (typed.length < 2) {
       openMap();
@@ -106,12 +122,21 @@ export function LandingMap() {
           <div className="hidden shrink-0 sm:block">
             <Logo compact />
           </div>
-          <form onSubmit={search} className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]">
+          <form
+            onSubmit={search}
+            onPointerDown={(event) => {
+              if (signedIn) return;
+              event.preventDefault();
+              openMap();
+            }}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]"
+          >
             <span className="sr-only">Search jobs</span>
             <SearchIcon />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              readOnly={!signedIn}
               placeholder="Search jobs, places, or areas"
               className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
             />
@@ -133,7 +158,7 @@ export function LandingMap() {
               radiusKm={5}
               markers={markers}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={openPin}
             />
             <div className="absolute inset-x-3 top-3 z-[700] flex flex-col items-center gap-2 sm:inset-x-16 sm:top-4">
               <MapToast message={toast} />

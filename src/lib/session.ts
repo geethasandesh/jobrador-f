@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { AuthError, Session as SupabaseSession } from "@supabase/supabase-js";
+import { registerAccount } from "./api/client";
 import { getSupabase, isAuthConfigured } from "./supabase";
 
 export type Session = {
@@ -72,13 +73,9 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signUp(email: string, password: string) {
-  const { data, error } = await getSupabase().auth.signUp({
-    email: email.trim(),
-    password,
-    options: { emailRedirectTo: `${window.location.origin}/login` },
-  });
-  if (error) throw new Error(message(error));
-  return Boolean(data.session);
+  await registerAccount(email.trim(), password);
+  await signIn(email, password);
+  return true;
 }
 
 export async function requestPasswordReset(email: string) {
