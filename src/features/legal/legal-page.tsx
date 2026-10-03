@@ -12,7 +12,7 @@ export function LegalPage({
   children: ReactNode;
 }) {
   return (
-    <main className="min-h-[calc(100dvh-72px)] bg-[#f4f4f2] text-ink">
+    <main className="min-h-[calc(100dvh-72px)] bg-transparent text-ink">
       <article className="mx-auto w-full max-w-2xl px-6 py-16">
         <h1 className="text-3xl font-semibold tracking-[-0.03em]">{title}</h1>
         <p className="mt-4 text-sm leading-relaxed text-[#5e5e5e]">{lede}</p>

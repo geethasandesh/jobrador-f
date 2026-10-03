@@ -4,6 +4,7 @@ import { FactList } from "@/components/fact-list";
 import { KindBadge } from "@/components/kind-badge";
 import { SampleBanner } from "@/components/sample-banner";
 import { ConfirmLead } from "@/features/show/details/confirm-lead";
+import { OwnedPostGate } from "@/features/show/report/my-posts";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { getLead } from "@/lib/api/client";
 import { formatDistance, formatWhen } from "@/lib/format";
@@ -44,9 +45,13 @@ export default async function LeadPage({
         {reported ? ` · shared ${reported}` : ""}
       </p>
       <p className="mt-4 rounded-2xl bg-lead-soft px-4 py-3 text-sm text-lead">
-        {lead.status === "FILLED"
-          ? "Hiring is finished. This tip is no longer on the map."
-          : "A student shared this. It is not a confirmed vacancy."}
+        {lead.poster === "business"
+          ? lead.status === "FILLED"
+            ? "Hiring is stopped. This post is off the map until you start it again."
+            : "This business posted that they are hiring."
+          : lead.status === "FILLED"
+            ? "Hiring is finished. This tip is no longer on the map."
+            : "A student shared this. It is not a confirmed vacancy."}
       </p>
       <blockquote className="mt-6 border-l-4 border-lead pl-4 text-base leading-7">
         {lead.description}
@@ -68,16 +73,20 @@ export default async function LeadPage({
           </Link>
         </p>
       ) : null}
-      <ConfirmLead
-        id={lead.id}
-        initial={{
-          yes: lead.confirmYes,
-          no: lead.confirmNo,
-          unsure: lead.confirmUnsure,
-          done: lead.confirmDone,
-          status: lead.status,
-        }}
-      />
+      {lead.poster === "business" ? (
+        <OwnedPostGate id={lead.id} status={lead.status} poster={lead.poster} />
+      ) : (
+        <ConfirmLead
+          id={lead.id}
+          initial={{
+            yes: lead.confirmYes,
+            no: lead.confirmNo,
+            unsure: lead.confirmUnsure,
+            done: lead.confirmDone,
+            status: lead.status,
+          }}
+        />
+      )}
       <RecordActions
         canSave={false}
         stop={{

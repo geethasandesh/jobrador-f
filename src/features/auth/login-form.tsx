@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Logo } from "@/components/logo";
+import { hasSeenGuide } from "@/lib/guide";
 import { signIn, signUp } from "@/lib/session";
-import { isAuthConfigured } from "@/lib/supabase";
+import { getSupabase, isAuthConfigured } from "@/lib/supabase";
 
-function afterLogin(next: string | null) {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) return "/map";
-  return next;
+function afterLogin(next: string | null, showGuide: boolean) {
+  const path = !next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login") ? "/map" : next;
+  const [pathname, query = ""] = path.split("?");
+  const params = new URLSearchParams(query);
+  if (showGuide) params.set("guide", "1");
+  else params.delete("guide");
+  const search = params.toString();
+  return search ? `${pathname}?${search}` : pathname;
 }
 
 export function LoginForm() {
@@ -47,7 +53,9 @@ export function LoginForm() {
       } else {
         await signIn(email, password);
       }
-      router.push(afterLogin(searchParams.get("next")));
+      const { data } = await getSupabase().auth.getSession();
+      const userId = data.session?.user.id;
+      router.push(afterLogin(searchParams.get("next"), Boolean(userId && !hasSeenGuide(userId))));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Login failed.");
     } finally {
@@ -60,7 +68,9 @@ export function LoginForm() {
       <Logo />
       <h1 className="mt-10 text-4xl font-black tracking-tight">{mode === "create" ? "Create account" : "Login"}</h1>
       <p className="mt-2 text-sm text-muted">
-        {mode === "create" ? "This creates your account in Supabase." : "Sign in with your Supabase account."}
+        {mode === "create"
+          ? "This creates a sign-in with Supabase. Your email and password are not stored with the jobs."
+          : "Sign in with Supabase. The account stays separate from the job listings."}
       </p>
       <form onSubmit={submit} className="mt-8 space-y-3">
         <label className="block text-sm font-medium" htmlFor="email">

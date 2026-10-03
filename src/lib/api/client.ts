@@ -50,10 +50,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function searchPlaces(query: string, signal?: AbortSignal) {
-  return request<{ places: Array<{ label: string; latitude: number; longitude: number }> }>(
-    `/v1/places?q=${encodeURIComponent(query)}`,
-    { signal },
-  );
+  return request<{
+    places: Array<{ label: string; latitude: number; longitude: number }>;
+    outsideBerlin?: boolean;
+  }>(`/v1/places?q=${encodeURIComponent(query)}`, { signal });
 }
 
 export function getOpportunities(filters: SearchFilters, signal?: AbortSignal) {
@@ -81,9 +81,9 @@ function withOrigin(path: string, origin?: { latitude: number; longitude: number
   return `${path}?${params}`;
 }
 
-async function getOrNull<T>(path: string): Promise<T | null> {
+async function getOrNull<T>(path: string, headers?: Record<string, string>): Promise<T | null> {
   try {
-    return await request<T>(path);
+    return await request<T>(path, headers ? { headers } : undefined);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
@@ -94,8 +94,12 @@ export function getJob(id: string, origin?: { latitude: number; longitude: numbe
   return getOrNull<JobDetail>(withOrigin(`/v1/jobs/${id}`, origin));
 }
 
-export function getLead(id: string, origin?: { latitude: number; longitude: number }) {
-  return getOrNull<LeadDetail>(withOrigin(`/v1/leads/${id}`, origin));
+export async function getLead(id: string, origin?: { latitude: number; longitude: number }) {
+  const token = typeof window === "undefined" ? null : await accessToken();
+  return getOrNull<LeadDetail>(
+    withOrigin(`/v1/leads/${id}`, origin),
+    token ? { Authorization: `Bearer ${token}` } : undefined,
+  );
 }
 
 export function getBusiness(id: string, origin?: { latitude: number; longitude: number }) {
@@ -120,6 +124,7 @@ export function createLead(body: {
   salaryMin?: number;
   hoursMin?: number;
   hoursMax?: number;
+  poster?: "student" | "business";
 }) {
   return accountHeaders().then((headers) =>
     request<LeadDetail>("/v1/leads", {
@@ -170,6 +175,33 @@ export function stickWallNote(body: { displayName: string; body: string; color: 
   });
 }
 
+export type MyPost = {
+  id: string;
+  businessName: string;
+  title: string;
+  area: string;
+  status: string;
+  latitude: number;
+  longitude: number;
+  reportedAt: string;
+};
+
+export function listMyPosts() {
+  return accountHeaders().then((headers) =>
+    request<{ leads: MyPost[] }>("/v1/me/leads", { headers }),
+  );
+}
+
+export function managePost(id: string, action: "stop" | "delete" | "reopen") {
+  return accountHeaders().then((headers) =>
+    request<{ ok: true; status: string }>(`/v1/leads/${id}/manage`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action }),
+    }),
+  );
+}
+
 export function confirmLead(id: string, status: "yes" | "no" | "unsure" | "done") {
   return accountHeaders().then((headers) =>
     request<LeadDetail & { notice?: string }>(`/v1/leads/${id}/confirmations`, {
@@ -178,4 +210,18 @@ export function confirmLead(id: string, status: "yes" | "no" | "unsure" | "done"
       body: JSON.stringify({ status }),
     }),
   );
+}
+
+export function requestPasswordEmail(email: string) {
+  return request<{ ok: true }>("/v1/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function sendBugReport(body: { message: string; email?: string; page?: string }) {
+  return request<{ ok: true }>("/v1/bugs", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

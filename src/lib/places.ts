@@ -15,3 +15,6 @@ export const BERLIN_PLACES: Place[] = [
 ];
 
 export const DEFAULT_PLACE = BERLIN_PLACES[0];
+
+export const BERLIN_ONLY_MESSAGE =
+  "This service is only in Berlin. We are working to expand it. Thank you.";

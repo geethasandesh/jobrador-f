@@ -45,11 +45,13 @@ export function OpportunityCard({
       </p>
       {item.kind === "community_lead" ? (
         <p className="mt-2 text-sm text-lead">
-          {item.confirmYes ?? 0} confirmed
-          {(item.confirmNo ?? 0) > 0
-            ? ` · ${item.confirmNo} ${item.confirmNo === 1 ? "says" : "say"} outdated`
-            : ""}
-          {when ? ` · shared ${when}` : ""}
+          {item.poster === "business"
+            ? `Posted by the business${when ? ` · ${when}` : ""}`
+            : `${item.confirmYes ?? 0} confirmed${
+                (item.confirmNo ?? 0) > 0
+                  ? ` · ${item.confirmNo} ${item.confirmNo === 1 ? "says" : "say"} outdated`
+                  : ""
+              }${when ? ` · shared ${when}` : ""}`}
         </p>
       ) : null}
       {item.kind === "job" && when ? (

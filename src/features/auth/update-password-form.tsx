@@ -48,6 +48,7 @@ export function UpdatePasswordForm() {
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-16">
       <Logo />
       <h1 className="mt-10 text-4xl font-black tracking-tight">New password</h1>
+      <p className="mt-2 text-sm text-muted">This updates the Supabase sign-in only. It does not change the job listings.</p>
       {ready ? (
         <form onSubmit={submit} className="mt-8 space-y-3">
           <label className="block text-sm font-medium" htmlFor="password">

@@ -28,6 +28,15 @@ export default function HomePage() {
         titleComponent={
           <div className="relative">
             <Cat className="absolute -top-16 left-0 hidden sm:block" />
+            <p className="mb-6 flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#f5a3a3] bg-white/35 px-4 py-1.5 text-sm font-medium text-[#e10600] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-md">
+                <span className="relative block h-4 w-4 shrink-0" aria-hidden>
+                  <span className="absolute left-0 top-0 h-2.5 w-2.5 rounded-full border-[1.5px] border-current" />
+                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-[1.5px] border-current" />
+                </span>
+                Beta 1.0 · Berlin only
+              </span>
+            </p>
             <h1 className="text-center text-[2.7rem] font-black leading-[0.96] tracking-[-0.045em] text-ink sm:text-7xl">
               <span className="block">
                 Finding <span className="text-[#d5d5d5]">your next</span>

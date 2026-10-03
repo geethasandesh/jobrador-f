@@ -5,6 +5,7 @@ import { FactList } from "@/components/fact-list";
 import { ConfirmLead } from "@/features/show/details/confirm-lead";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { ApiError, getBusiness, getJob, getLead } from "@/lib/api/client";
+import { OwnedPostActions } from "@/features/show/report/my-posts";
 import type { BusinessDetail, JobDetail, Kind, LeadDetail, Opportunity } from "@/lib/api/types";
 import { formatDistance, formatWhen } from "@/lib/format";
 import { categoryLabel, jobTypeLabel, sourceLabel } from "@/lib/labels";
@@ -37,7 +38,12 @@ export function PlacePanel({
   const [focus, setFocus] = useState<{ id: string; kind: Kind } | null>(null);
   const current = focus ?? { id, kind };
   const hiring = Boolean(item?.hiring && current.kind === "nearby_business" && current.id === item.id);
-  const status = hiring ? { label: "HIRING", className: "bg-[#22c55e]" } : statusBar[current.kind];
+  const businessPost = item?.poster === "business" && current.kind === "community_lead";
+  const status = businessPost
+    ? { label: "BUSINESS POST", className: "bg-[#7c3aed]" }
+    : hiring
+      ? { label: "HIRING", className: "bg-[#22c55e]" }
+      : statusBar[current.kind];
 
   useEffect(() => {
     setFocus(null);
@@ -284,7 +290,7 @@ function JobBody({ detail }: { detail: JobDetail }) {
       >
         Apply on original website
       </a>
-      <p className="mt-2 text-xs text-muted">Sample source. This preview does not send an application.</p>
+      <p className="mt-2 text-xs text-muted">This opens the job’s own page. jobrador does not send the application.</p>
       <RecordActions
         canSave
         stop={{
@@ -318,9 +324,13 @@ function LeadBody({
         {reported ? ` · shared ${reported}` : ""}
       </p>
       <p className="mt-3 rounded-xl bg-lead-soft px-3 py-2 text-sm text-lead">
-        {lead.status === "FILLED"
-          ? "Hiring is finished. This tip is no longer on the map."
-          : "A student shared this. It is not a confirmed vacancy."}
+        {lead.poster === "business"
+          ? lead.status === "FILLED"
+            ? "Hiring is stopped. This post is off the map until you start it again."
+            : "This business posted that they are hiring."
+          : lead.status === "FILLED"
+            ? "Hiring is finished. This tip is no longer on the map."
+            : "A student shared this. It is not a confirmed vacancy."}
       </p>
       <p className="mt-4 text-sm leading-6">{lead.description}</p>
       <FactList
@@ -338,16 +348,20 @@ function LeadBody({
           View the business
         </button>
       ) : null}
-      <ConfirmLead
-        id={lead.id}
-        initial={{
-          yes: lead.confirmYes,
-          no: lead.confirmNo,
-          unsure: lead.confirmUnsure,
-          done: lead.confirmDone,
-          status: lead.status,
-        }}
-      />
+      {lead.poster === "business" ? (
+        lead.mine ? <OwnedPostActions id={lead.id} status={lead.status} /> : null
+      ) : (
+        <ConfirmLead
+          id={lead.id}
+          initial={{
+            yes: lead.confirmYes,
+            no: lead.confirmNo,
+            unsure: lead.confirmUnsure,
+            done: lead.confirmDone,
+            status: lead.status,
+          }}
+        />
+      )}
       <RecordActions
         canSave={false}
         stop={{

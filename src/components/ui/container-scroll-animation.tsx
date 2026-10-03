@@ -66,11 +66,13 @@ export function ContainerScroll({
   return (
     <div ref={containerRef} className="relative h-[210vh]">
       <div className="sticky top-0 h-dvh overflow-hidden">
-        <div className="relative h-full w-full" style={{ perspective: "1200px" }}>
+        <div className="relative h-full w-full">
           <Header translate={textY} titleComponent={titleComponent} />
-          <Card rotate={rotate} scale={scale} y={cardY} startTop={startTop}>
-            {children}
-          </Card>
+          <div className="pointer-events-none absolute inset-0" style={{ perspective: "1200px" }}>
+            <Card rotate={rotate} scale={scale} y={cardY} startTop={startTop}>
+              {children}
+            </Card>
+          </div>
         </div>
       </div>
     </div>
@@ -107,7 +109,7 @@ function Card({
   return (
     <motion.div
       style={{ rotateX: rotate, scale, y, top: startTop, x: "-50%", transformOrigin: "center top" }}
-      className="absolute left-1/2 h-[32rem] w-[92%] max-w-5xl rounded-[2.2rem] bg-black p-3 shadow-[0_40px_80px_rgba(0,0,0,0.28)] md:h-[38rem] md:rounded-[2.6rem] md:p-4"
+      className="pointer-events-auto absolute left-1/2 h-[32rem] w-[92%] max-w-5xl rounded-[2.2rem] bg-black p-3 shadow-[0_40px_80px_rgba(0,0,0,0.28)] md:h-[38rem] md:rounded-[2.6rem] md:p-4"
     >
       <div className="h-full w-full overflow-hidden rounded-[1.45rem] bg-white md:rounded-[1.7rem]">{children}</div>
     </motion.div>

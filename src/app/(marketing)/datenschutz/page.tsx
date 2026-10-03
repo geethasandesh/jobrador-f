@@ -73,6 +73,14 @@ export default function PrivacyPolicyPage() {
           Anmeldung und die Kennung der Student Wall liegen im lokalen Speicher des Browsers.
         </p>
       </LegalSection>
+      <LegalSection title="Passwort und Fehlermeldungen">
+        <p>
+          Wer ein neues Passwort anfordert, bekommt eine E-Mail mit einem Link. Die Adresse muss zu einem
+          Konto gehören. Wer einen Fehler meldet, sendet den Text und, wenn angegeben, eine E-Mail und
+          die Seite. Die Nachricht geht an die Personen, die das Projekt betreiben. Sie wird nicht in
+          der Datenbank der Jobangebote gespeichert.
+        </p>
+      </LegalSection>
       <LegalSection title="Rechte">
         <p>
           Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch können

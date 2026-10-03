@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Logo } from "@/components/logo";
-import { requestPasswordReset } from "@/lib/session";
-import { isAuthConfigured } from "@/lib/supabase";
+import { ApiError, requestPasswordEmail } from "@/lib/api/client";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -15,20 +14,16 @@ export function ForgotPasswordForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (!isAuthConfigured()) {
-      setError("Add the Supabase anon key in jobrador-f/.env.local, then restart the site.");
-      return;
-    }
     if (!email.includes("@")) {
       setError("Use the email on the account.");
       return;
     }
     setPending(true);
     try {
-      await requestPasswordReset(email);
+      await requestPasswordEmail(email);
       setSent(true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not send the reset email.");
+      setError(caught instanceof ApiError ? caught.message : "Could not send the reset email.");
     } finally {
       setPending(false);
     }
@@ -38,7 +33,9 @@ export function ForgotPasswordForm() {
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-5 py-16">
       <Logo />
       <h1 className="mt-10 text-4xl font-black tracking-tight">Forgot password</h1>
-      <p className="mt-2 text-sm text-muted">Supabase emails a link to choose a new password.</p>
+      <p className="mt-2 text-sm text-muted">
+        We email a reset link from the project inbox. The job listings are not part of this.
+      </p>
       {sent ? (
         <p className="mt-8 text-sm">If that email has an account, the reset link is on its way.</p>
       ) : (
@@ -63,6 +60,9 @@ export function ForgotPasswordForm() {
       )}
       <Link href="/login" className="mt-4 text-sm font-medium">
         Back to login
+      </Link>
+      <Link href="/report-a-bug" className="mt-3 text-sm font-medium">
+        Report a bug
       </Link>
     </main>
   );

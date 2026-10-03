@@ -7,7 +7,10 @@ import { AppContainer } from "@/components/ui/container-scroll-animation";
 import { MapCanvas, type MapMarker } from "@/components/map-canvas";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { PlacePanel } from "@/features/show/explore/place-panel";
+import { HowToDialog } from "@/features/show/explore/how-to-dialog";
+import { MyPosts } from "@/features/show/report/my-posts";
 import { ReportForm } from "@/features/show/report/report-form";
+import { MapToast } from "@/components/map-toast";
 import { SampleBanner } from "@/components/sample-banner";
 import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
 import type { Kind, OpportunityList } from "@/lib/api/types";
@@ -20,8 +23,9 @@ import {
   SALARY_OPTIONS,
 } from "@/lib/labels";
 import { removeRouteStop, useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
-import { signOut, useSession } from "@/lib/session";
-import { BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
+import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
+import { signOut, useAuthReady, useSession } from "@/lib/session";
+import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
 
 const KINDS: Array<{ id: Kind; label: string }> = [
   { id: "job", label: "Jobs" },
@@ -54,13 +58,15 @@ export function ExploreScreen() {
   const [data, setData] = useState<OpportunityList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [pinnedKind, setPinnedKind] = useState<Kind | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [panel, setPanel] = useState<"list" | "filters" | "visits" | "report" | null>(null);
+  const [panel, setPanel] = useState<"list" | "filters" | "visits" | "report" | "post" | "mine" | null>(null);
   const [savedOnly, setSavedOnly] = useState(false);
   const ready = useClientReady();
+  const authReady = useAuthReady();
   const session = useSession();
   const savedIds = useSavedJobs();
   const stops = useRoute();
@@ -73,6 +79,8 @@ export function ExploreScreen() {
     setSeenPanel(requestedPanel);
     if (requestedPanel === "visits") setPanel("visits");
     if (requestedPanel === "report" || requestedPanel === "share") setPanel("report");
+    if (requestedPanel === "post") setPanel("post");
+    if (requestedPanel === "mine") setPanel("mine");
     if (requestedPanel === "saved") {
       setPanel("list");
       setSavedOnly(true);
@@ -111,7 +119,9 @@ export function ExploreScreen() {
     const handle = window.setTimeout(() => {
       searchPlaces(query, controller.signal)
         .then((result) => {
-          if (!controller.signal.aborted) setPlaceHits(result.places);
+          if (controller.signal.aborted) return;
+          setPlaceHits(result.places);
+          if (result.outsideBerlin) setToast(BERLIN_ONLY_MESSAGE);
         })
         .catch(() => {
           if (!controller.signal.aborted) setPlaceHits([]);
@@ -127,6 +137,7 @@ export function ExploreScreen() {
     setDraftQuery(place.label);
     setPlaceHits([]);
     setNotice(null);
+    setToast(null);
     update({
       lat: String(place.latitude),
       lng: String(place.longitude),
@@ -146,6 +157,21 @@ export function ExploreScreen() {
     }
     router.replace(`/map?${next.toString()}`, { scroll: false });
   }
+
+  const guideRequested = searchParams.get("guide") === "1";
+  const userId = session?.id;
+  const showGuide = Boolean(authReady && userId && guideRequested && !hasSeenGuide(userId));
+
+  function dismissGuide(openPost = false) {
+    if (session?.id) markGuideSeen(session.id);
+    if (openPost) setPanel("post");
+    update({ guide: null });
+  }
+
+  useEffect(() => {
+    if (!authReady || !session?.id || !guideRequested || !hasSeenGuide(session.id)) return;
+    update({ guide: null });
+  }, [authReady, guideRequested, session?.id]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -233,10 +259,19 @@ export function ExploreScreen() {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const nextLatitude = position.coords.latitude;
+        const nextLongitude = position.coords.longitude;
+        const inside =
+          nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
+        if (!inside) {
+          setToast(BERLIN_ONLY_MESSAGE);
+          return;
+        }
         setNotice(null);
+        setToast(null);
         update({
-          lat: String(position.coords.latitude),
-          lng: String(position.coords.longitude),
+          lat: String(nextLatitude),
+          lng: String(nextLongitude),
           label: "Your location",
           q: null,
         });
@@ -256,7 +291,7 @@ export function ExploreScreen() {
     panelItem?.kind ?? stops.find((stop) => stop.id === panelId)?.kind ?? (panelId === detailsId ? pinnedKind : null);
   const panelTarget = panelId && panelKind ? { id: panelId, kind: panelKind, item: panelItem } : null;
 
-  function togglePanel(next: "list" | "filters" | "visits" | "report") {
+  function togglePanel(next: "list" | "filters" | "visits" | "report" | "post" | "mine") {
     setPanel((current) => (current === next ? null : next));
   }
 
@@ -278,16 +313,34 @@ export function ExploreScreen() {
           className="flex min-w-0 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]"
           onSubmit={(event) => {
             event.preventDefault();
-            const place = placeHits[0];
-            if (place) choosePlace(place);
-            else setNotice("Enter a Berlin postal code or area name.");
+            const query = draftQuery.trim();
+            if (query.length < 2) return;
+            setToast("Searching…");
+            void searchPlaces(query)
+              .then((result) => {
+                if (result.outsideBerlin) {
+                  setPlaceHits([]);
+                  setToast(BERLIN_ONLY_MESSAGE);
+                  return;
+                }
+                const place = result.places[0];
+                if (!place) {
+                  setToast("No Berlin place matched that name.");
+                  return;
+                }
+                choosePlace(place);
+              })
+              .catch(() => setToast("Search did not go through. Try that Berlin name again."));
           }}
         >
           <span className="sr-only">Search a Berlin area</span>
           <SearchIcon />
           <input
             value={draftQuery}
-            onChange={(event) => setDraftQuery(event.target.value)}
+            onChange={(event) => {
+              setDraftQuery(event.target.value);
+              setToast(null);
+            }}
             placeholder="Postal code or area in Berlin"
             className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
           />
@@ -322,6 +375,41 @@ export function ExploreScreen() {
         ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedId(null);
+              setDetailsId(null);
+              setPinnedKind(null);
+              setPanel("post");
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm ${panel === "post" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
+          >
+            <BriefcaseIcon />
+            <span className="hidden sm:inline">Post a job</span>
+            <span className="sm:hidden">Post</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedId(null);
+              setDetailsId(null);
+              setPinnedKind(null);
+              setPanel("report");
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-2 text-sm font-medium shadow-sm ${panel === "report" ? "bg-zinc-100 text-ink" : "bg-white text-muted"}`}
+          >
+            <FlagIcon />
+            <span className="hidden sm:inline">Share a tip</span>
+            <span className="sm:hidden">Tip</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPanel("mine")}
+            className="hidden rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm sm:inline-flex"
+          >
+            Your posts
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -370,10 +458,11 @@ export function ExploreScreen() {
           const inside =
             nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
           if (!inside) {
-            setNotice("For now, the map stays in Berlin.");
+            setToast(BERLIN_ONLY_MESSAGE);
             return;
           }
           setNotice(null);
+          setToast(null);
           setDraftQuery("");
           update({
             lat: nextLatitude.toFixed(5),
@@ -385,6 +474,7 @@ export function ExploreScreen() {
       />
 
       <div className="absolute left-1/2 top-4 z-[700] flex -translate-x-1/2 flex-col items-center gap-2">
+        <MapToast message={toast} />
         <SampleBanner dataSource={data?.dataSource} />
         {searching ? (
           <p className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm">Looking in this circle…</p>
@@ -402,6 +492,18 @@ export function ExploreScreen() {
           <FilterIcon />
         </RailButton>
         <RailButton
+          label="Post"
+          active={panel === "post"}
+          onClick={() => {
+            setSelectedId(null);
+            setDetailsId(null);
+            setPinnedKind(null);
+            togglePanel("post");
+          }}
+        >
+          <BriefcaseIcon />
+        </RailButton>
+        <RailButton
           label="Share"
           active={panel === "report"}
           onClick={() => {
@@ -411,16 +513,82 @@ export function ExploreScreen() {
             togglePanel("report");
           }}
         >
-          <PinIcon />
+          <FlagIcon />
         </RailButton>
       </nav>
 
       {panel ? (
         <aside className="absolute top-4 bottom-24 left-3 z-[700] flex w-[min(100%-1.5rem,360px)] flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:bottom-6 sm:left-24">
-          {panel === "report" ? (
+          {panel === "post" ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between px-4 pt-4">
-                <h2 className="text-lg font-bold tracking-tight">Share a tip</h2>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#ff7a1a]">Your business</p>
+                  <h2 className="text-lg font-bold tracking-tight">Post a job</h2>
+                </div>
+                <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                <ReportForm
+                  embedded
+                  purpose="business"
+                  areaLabel={label}
+                  latitude={latitude}
+                  longitude={longitude}
+                  onCreated={(lead) => {
+                    setPanel("mine");
+                    setSelectedId(lead.id);
+                    setDetailsId(lead.id);
+                    setPinnedKind("community_lead");
+                    setReloadKey((value) => value + 1);
+                    update({
+                      lat: String(lead.latitude),
+                      lng: String(lead.longitude),
+                      label: lead.area,
+                      panel: null,
+                      guide: null,
+                    });
+                  }}
+                />
+                <button type="button" className="mt-4 text-sm font-semibold" onClick={() => setPanel("mine")}>
+                  Your posts
+                </button>
+              </div>
+            </div>
+          ) : panel === "mine" ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center justify-between px-4 pt-4">
+                <h2 className="text-lg font-bold tracking-tight">Your posts</h2>
+                <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
+                  ×
+                </button>
+              </div>
+              <p className="px-4 pt-1 text-sm text-muted">Stop hiring or delete a job you posted.</p>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                <MyPosts
+                  onChanged={() => setReloadKey((value) => value + 1)}
+                  onOpen={(post) => {
+                    setSelectedId(post.id);
+                    setDetailsId(post.id);
+                    setPinnedKind("community_lead");
+                    update({
+                      lat: String(post.latitude),
+                      lng: String(post.longitude),
+                      label: post.area,
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          ) : panel === "report" ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center justify-between px-4 pt-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#3b82f6]">Student tip</p>
+                  <h2 className="text-lg font-bold tracking-tight">Share a tip</h2>
+                </div>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
                   ×
                 </button>
@@ -682,7 +850,7 @@ export function ExploreScreen() {
           <RouteIcon />
         </RailButton>
         <RailButton
-          label="Share"
+          label="Tip"
           active={panel === "report"}
           onClick={() => {
             setSelectedId(null);
@@ -691,11 +859,12 @@ export function ExploreScreen() {
             togglePanel("report");
           }}
         >
-          <PinIcon />
+          <FlagIcon />
         </RailButton>
       </nav>
       </div>
       </AppContainer>
+      {showGuide ? <HowToDialog onClose={() => dismissGuide()} onPostJob={() => dismissGuide(true)} /> : null}
     </div>
   );
 }
@@ -711,11 +880,30 @@ function RailButton({
   onClick: () => void;
   children: ReactNode;
 }) {
+  const color = active ? "text-ink" : "hover:text-ink";
+  const bubble = active ? "bg-zinc-100" : "";
   return (
-    <button type="button" onClick={onClick} className={`grid w-full place-items-center gap-0.5 px-1 py-2 ${active ? "text-ink" : "hover:text-ink"}`}>
-      <span className={`grid h-8 w-8 place-items-center rounded-xl ${active ? "bg-zinc-100" : ""}`}>{children}</span>
+    <button type="button" onClick={onClick} className={`grid w-full place-items-center gap-0.5 px-1 py-2 ${color}`}>
+      <span className={`grid h-8 w-8 place-items-center rounded-xl ${bubble}`}>{children}</span>
       {label}
     </button>
+  );
+}
+
+function BriefcaseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect x="2" y="5.2" width="12" height="8" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M6 5.2V4.1A1.1 1.1 0 0 1 7.1 3h1.8A1.1 1.1 0 0 1 10 4.1v1.1" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function FlagIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M4 2.6v11M4 3.2h7.4L9.4 6.1l2 2.9H4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
   );
 }
 

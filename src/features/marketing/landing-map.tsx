@@ -4,14 +4,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Logo } from "@/components/logo";
 import { MapCanvas, type MapMarker } from "@/components/map-canvas";
+import { MapToast } from "@/components/map-toast";
 import { SampleBanner } from "@/components/sample-banner";
-import { ApiError, getOpportunities } from "@/lib/api/client";
+import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
 import type { Kind, Opportunity } from "@/lib/api/types";
 import { formatDistance, mapHref } from "@/lib/format";
 import { markersFromOpportunities } from "@/lib/map-markers";
 import { categoryLabel, jobTypeLabel, KIND_LABEL } from "@/lib/labels";
 import { useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
-import { DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, DEFAULT_PLACE } from "@/lib/places";
 import { useAuthReady, useSession } from "@/lib/session";
 
 const statusBar: Record<Kind, { label: string; className: string }> = {
@@ -30,8 +31,9 @@ export function LandingMap() {
   const savedCount = ready ? savedIds.length : 0;
   const visitCount = ready ? stops.length : 0;
   const [query, setQuery] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
   const [items, setItems] = useState<Opportunity[]>([]);
-  const [dataSource, setDataSource] = useState<"mock" | "live" | undefined>("mock");
+  const [dataSource, setDataSource] = useState<"mock" | "live" | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function LandingMap() {
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
-        if (caught instanceof ApiError) setDataSource("mock");
+        if (caught instanceof ApiError) return;
       });
     return () => controller.abort();
   }, []);
@@ -74,8 +76,27 @@ export function LandingMap() {
 
   function search(event: FormEvent) {
     event.preventDefault();
-    const href = mapHref(DEFAULT_PLACE.latitude, DEFAULT_PLACE.longitude, DEFAULT_PLACE.label);
-    openMap(query.trim() ? `${href}&q=${encodeURIComponent(query.trim())}` : href);
+    const typed = query.trim();
+    if (typed.length < 2) {
+      openMap();
+      return;
+    }
+    setToast("Searching…");
+    void searchPlaces(typed)
+      .then((result) => {
+        if (result.outsideBerlin) {
+          setToast(BERLIN_ONLY_MESSAGE);
+          return;
+        }
+        const place = result.places[0];
+        if (!place) {
+          setToast("No Berlin place matched that name.");
+          return;
+        }
+        setToast(null);
+        openMap(mapHref(place.latitude, place.longitude, place.label));
+      })
+      .catch(() => setToast("Search did not go through. Try that Berlin name again."));
   }
 
   return (
@@ -112,7 +133,8 @@ export function LandingMap() {
               selectedId={selectedId}
               onSelect={setSelectedId}
             />
-            <div className="absolute left-1/2 top-4 z-[700] -translate-x-1/2">
+            <div className="absolute left-1/2 top-4 z-[700] flex -translate-x-1/2 flex-col items-center gap-2">
+              <MapToast message={toast} />
               <SampleBanner dataSource={dataSource} />
             </div>
             <nav className="absolute top-4 left-3 z-[700] hidden w-16 flex-col items-center gap-1 rounded-2xl bg-white py-2 text-[10px] font-medium text-muted shadow-[0_10px_30px_rgba(17,17,17,0.1)] sm:flex">

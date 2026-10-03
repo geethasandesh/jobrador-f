@@ -3,6 +3,7 @@ import type { AuthError, Session as SupabaseSession } from "@supabase/supabase-j
 import { getSupabase, isAuthConfigured } from "./supabase";
 
 export type Session = {
+  id: string;
   email: string;
 };
 
@@ -16,14 +17,15 @@ const listeners = new Set<() => void>();
 let started = false;
 
 function emit(next: AuthSnapshot) {
-  if (next.ready === snapshot.ready && next.session?.email === snapshot.session?.email) return;
+  if (next.ready === snapshot.ready && next.session?.id === snapshot.session?.id && next.session?.email === snapshot.session?.email) return;
   snapshot = next;
   listeners.forEach((listener) => listener());
 }
 
 function toSession(session: SupabaseSession | null): Session | null {
+  const id = session?.user.id;
   const email = session?.user.email;
-  return email ? { email } : null;
+  return id && email ? { id, email } : null;
 }
 
 function ensureAuth() {

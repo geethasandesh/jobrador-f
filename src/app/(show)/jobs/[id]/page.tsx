@@ -77,7 +77,7 @@ export default async function JobPage({
         </a>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Sample source. This preview does not send an application.
+        This opens the job’s own page. jobrador does not send the application.
       </p>
       <RecordActions
         canSave

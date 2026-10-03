@@ -22,12 +22,20 @@ export function SiteHeader() {
     return `/login?next=${encodeURIComponent(path)}`;
   }
 
-  const onHome = pathname === "/";
+  const onSky =
+    pathname === "/" ||
+    pathname === "/impressum" ||
+    pathname === "/datenschutz" ||
+    pathname === "/terms" ||
+    pathname === "/report-a-bug";
 
   return (
-    <header className={`sticky top-0 z-[900] ${onHome ? "bg-transparent" : "bg-white"}`}>
+    <header className={`sticky top-0 z-[900] ${onSky ? "bg-transparent" : "bg-white"}`}>
       <div className="mx-auto flex h-[72px] w-full max-w-6xl items-center justify-between gap-4 px-5">
-        <Logo />
+        <div className="flex items-center gap-2">
+          <Logo />
+          <span className="text-sm font-semibold text-[#e10600]">Beta</span>
+        </div>
         <nav className="flex items-center gap-1 text-sm font-medium text-ink sm:gap-2">
           <Link href={destination("/map?panel=share")} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
             <PinIcon />

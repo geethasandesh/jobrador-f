@@ -53,6 +53,7 @@ export type Opportunity = {
   linkedJobTitle?: string;
   linkedJobType?: string | null;
   linkedJobIds?: string[];
+  poster?: "student" | "business";
 };
 
 export type OpportunityList = {
@@ -119,6 +120,8 @@ export type LeadRecord = {
   confirmUnsure: number;
   confirmDone?: number;
   status: string;
+  poster?: "student" | "business";
+  mine?: boolean;
   salaryLabel: string | null;
   languageLabel: string | null;
   hoursLabel: string | null;
