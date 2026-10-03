@@ -7,7 +7,8 @@ import { MapCanvas, type MapMarker } from "@/components/map-canvas";
 import { SampleBanner } from "@/components/sample-banner";
 import { ApiError, getOpportunities } from "@/lib/api/client";
 import type { Kind, Opportunity } from "@/lib/api/types";
-import { compactDistance, formatDistance, mapHref } from "@/lib/format";
+import { formatDistance, mapHref } from "@/lib/format";
+import { markersFromOpportunities } from "@/lib/map-markers";
 import { categoryLabel, jobTypeLabel, KIND_LABEL } from "@/lib/labels";
 import { useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
 import { DEFAULT_PLACE } from "@/lib/places";
@@ -57,17 +58,7 @@ export function LandingMap() {
   }, []);
 
   const markers: MapMarker[] = useMemo(
-    () =>
-      items.map((item) => ({
-        id: item.id,
-        kind: item.kind,
-        latitude: item.latitude,
-        longitude: item.longitude,
-        title: item.businessName,
-        subtitle: item.kind === "nearby_business" ? "No public vacancy" : item.title,
-        label: compactDistance(item.distanceKm),
-        href: "/map",
-      })),
+    () => markersFromOpportunities(items, () => "/map"),
     [items],
   );
 
@@ -134,7 +125,7 @@ export function LandingMap() {
               <RailButton label="Filters" onClick={() => openMap()}>
                 <FilterIcon />
               </RailButton>
-              <RailButton label="Report" onClick={() => openMap("/map?panel=report")}>
+              <RailButton label="Share" onClick={() => openMap("/map?panel=share")}>
                 <PinIcon />
               </RailButton>
             </nav>
@@ -145,7 +136,10 @@ export function LandingMap() {
 }
 
 function PreviewCard({ item, onOpen, onClose }: { item: Opportunity; onOpen: () => void; onClose: () => void }) {
-  const status = statusBar[item.kind];
+  const status =
+    item.kind === "nearby_business" && item.hiring
+      ? { label: "HIRING", className: "bg-[#22c55e]" }
+      : statusBar[item.kind];
   const initials = item.businessName
     .split(" ")
     .slice(0, 2)
@@ -166,7 +160,13 @@ function PreviewCard({ item, onOpen, onClose }: { item: Opportunity; onOpen: () 
           </button>
         </div>
         <h2 className="mt-3 text-xl font-bold tracking-tight">{item.businessName}</h2>
-        <p className="text-sm text-muted">{item.kind === "nearby_business" ? "No public vacancy" : item.title}</p>
+        <p className="text-sm text-muted">
+          {item.kind === "nearby_business"
+            ? item.hiring
+              ? `Hiring · ${item.linkedJobTitle ?? "Open role"}`
+              : "No public vacancy found"
+            : item.title}
+        </p>
         <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
           <span>{formatDistance(item.distanceKm)} away</span>
           <span>{item.jobType ? jobTypeLabel(item.jobType) : categoryLabel(item.category)}</span>

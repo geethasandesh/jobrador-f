@@ -89,7 +89,7 @@ export function ReportForm({
       }
       router.push(`/leads/${created.lead.id}`);
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not submit the lead.");
+      setError(caught instanceof ApiError ? caught.message : "Could not share that tip.");
       setPending(false);
     }
   }
@@ -97,9 +97,9 @@ export function ReportForm({
   return (
     <form onSubmit={onSubmit} className={embedded ? "space-y-4" : "mx-auto max-w-xl space-y-4 px-4 py-8"}>
       <div>
-        {embedded ? null : <h1 className="font-serif text-4xl text-ink">Report a hiring lead</h1>}
+        {embedded ? null : <h1 className="font-serif text-4xl text-ink">Share a hiring tip</h1>}
         <p className={embedded ? "text-sm text-muted" : "mt-2 text-muted"}>
-          Found a place hiring? Share what you actually saw. This is a student report, not a confirmed job.
+          Found a place hiring? Share what you actually saw. This is a student tip, not a confirmed job.
         </p>
       </div>
 
@@ -185,7 +185,7 @@ export function ReportForm({
       {error ? <p className="text-sm text-place">{error}</p> : null}
 
       <button type="submit" disabled={pending} className="rounded-2xl bg-brand px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-        {pending ? "Submitting…" : "Submit hiring lead"}
+        {pending ? "Sharing…" : "Share this tip"}
       </button>
     </form>
   );

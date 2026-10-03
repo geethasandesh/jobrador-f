@@ -7,7 +7,7 @@ import { RecordActions } from "@/features/show/details/record-actions";
 import { ApiError, getBusiness, getJob, getLead } from "@/lib/api/client";
 import type { BusinessDetail, JobDetail, Kind, LeadDetail, Opportunity } from "@/lib/api/types";
 import { formatDistance, formatWhen } from "@/lib/format";
-import { categoryLabel, jobTypeLabel, KIND_LABEL } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, sourceLabel } from "@/lib/labels";
 
 const statusBar: Record<Kind, { label: string; className: string }> = {
   job: { label: "JOB LISTING", className: "bg-[#22c55e]" },
@@ -36,7 +36,8 @@ export function PlacePanel({
 }) {
   const [focus, setFocus] = useState<{ id: string; kind: Kind } | null>(null);
   const current = focus ?? { id, kind };
-  const status = statusBar[current.kind];
+  const hiring = Boolean(item?.hiring && current.kind === "nearby_business" && current.id === item.id);
+  const status = hiring ? { label: "HIRING", className: "bg-[#22c55e]" } : statusBar[current.kind];
 
   useEffect(() => {
     setFocus(null);
@@ -68,20 +69,40 @@ export function PlacePanel({
             onClose={onClose}
           />
         ) : item ? (
-          <Preview item={item} onClose={onClose} onExpand={onExpand} />
+          <Preview
+            item={item}
+            onClose={onClose}
+            onExpand={onExpand}
+            onOpen={(nextId, nextKind) => {
+              setFocus({ id: nextId, kind: nextKind });
+              onExpand();
+            }}
+          />
         ) : null}
       </div>
     </article>
   );
 }
 
-function Preview({ item, onClose, onExpand }: { item: Opportunity; onClose: () => void; onExpand: () => void }) {
+function Preview({
+  item,
+  onClose,
+  onExpand,
+  onOpen,
+}: {
+  item: Opportunity;
+  onClose: () => void;
+  onExpand: () => void;
+  onOpen: (id: string, kind: Kind) => void;
+}) {
   const initials = item.businessName
     .split(" ")
     .slice(0, 2)
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+  const hiring = item.kind === "nearby_business" && Boolean(item.hiring);
+  const path = item.kind === "job" ? "jobs" : item.kind === "community_lead" ? "leads" : "businesses";
 
   return (
     <>
@@ -92,16 +113,51 @@ function Preview({ item, onClose, onExpand }: { item: Opportunity; onClose: () =
         </button>
       </div>
       <h2 className="mt-3 text-xl font-bold tracking-tight">{item.businessName}</h2>
-      <p className="text-sm text-muted">{item.kind === "nearby_business" ? "No public vacancy" : item.title}</p>
-      <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-        <span>{formatDistance(item.distanceKm)} away</span>
-        <span>{item.jobType ? jobTypeLabel(item.jobType) : categoryLabel(item.category)}</span>
-        {item.salaryLabel ? <span>{item.salaryLabel}</span> : <span>Salary not listed</span>}
+      <p className="text-sm text-muted">
+        {categoryLabel(item.category)} · {formatDistance(item.distanceKm)} away
       </p>
-      <p className="mt-2 text-xs text-muted">{KIND_LABEL[item.kind]} · {item.area}</p>
-      <button type="button" onClick={onExpand} className="mt-4 inline-flex rounded-full bg-ink px-3.5 py-1.5 text-sm font-semibold text-white">
-        View details
-      </button>
+      {item.kind === "nearby_business" ? (
+        hiring ? (
+          <div className="mt-3">
+            <p className="text-sm font-semibold text-job">Hiring</p>
+            <p className="mt-1 font-semibold">{item.linkedJobTitle}</p>
+            {item.linkedJobType ? <p className="text-sm text-muted">{jobTypeLabel(item.linkedJobType)}</p> : null}
+          </div>
+        ) : (
+          <p className={`mt-3 text-sm font-semibold ${item.status === "UNCHECKED" ? "text-muted" : "text-place"}`}>
+            {item.status === "UNCHECKED" ? "Not checked yet" : "No public vacancy found"}
+          </p>
+        )
+      ) : (
+        <p className="mt-3 text-sm text-muted">{item.title}</p>
+      )}
+      {item.address ? <p className="mt-2 text-sm text-muted">{item.address}</p> : null}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {hiring && item.linkedJobId ? (
+          <button
+            type="button"
+            onClick={() => onOpen(item.linkedJobId ?? "", "job")}
+            className="rounded-full bg-ink px-3.5 py-1.5 text-sm font-semibold text-white"
+          >
+            View job
+          </button>
+        ) : (
+          <button type="button" onClick={onExpand} className="rounded-full bg-ink px-3.5 py-1.5 text-sm font-semibold text-white">
+            {item.kind === "nearby_business" ? "View business" : "View details"}
+          </button>
+        )}
+      </div>
+      <RecordActions
+        compact
+        canSave={item.kind === "job"}
+        stop={{
+          id: item.id,
+          kind: item.kind,
+          title: item.businessName,
+          subtitle: hiring ? (item.linkedJobTitle ?? "Hiring") : item.kind === "nearby_business" ? "No public vacancy found" : item.title,
+          href: `/${path}/${item.id}`,
+        }}
+      />
     </>
   );
 }
@@ -217,7 +273,7 @@ function JobBody({ detail }: { detail: JobDetail }) {
           { label: "Salary", value: job.salaryLabel ?? null },
           { label: "Language", value: job.languageLabel ?? null },
           { label: "Posted", value: posted },
-          { label: "Source", value: job.sourceName },
+          { label: "Source", value: sourceLabel(job.sourceName) },
         ]}
       />
       <a
@@ -259,10 +315,12 @@ function LeadBody({
       <p className="mt-1 text-sm text-muted">
         {lead.address}
         {lead.distanceKm != null ? ` · ${formatDistance(lead.distanceKm)} away` : ""}
-        {reported ? ` · reported ${reported}` : ""}
+        {reported ? ` · shared ${reported}` : ""}
       </p>
       <p className="mt-3 rounded-xl bg-lead-soft px-3 py-2 text-sm text-lead">
-        A student reported this. It is not a confirmed vacancy.
+        {lead.status === "FILLED"
+          ? "Hiring is finished. This tip is no longer on the map."
+          : "A student shared this. It is not a confirmed vacancy."}
       </p>
       <p className="mt-4 text-sm leading-6">{lead.description}</p>
       <FactList
@@ -282,7 +340,13 @@ function LeadBody({
       ) : null}
       <ConfirmLead
         id={lead.id}
-        initial={{ yes: lead.confirmYes, no: lead.confirmNo, unsure: lead.confirmUnsure }}
+        initial={{
+          yes: lead.confirmYes,
+          no: lead.confirmNo,
+          unsure: lead.confirmUnsure,
+          done: lead.confirmDone,
+          status: lead.status,
+        }}
       />
       <RecordActions
         canSave={false}
@@ -314,20 +378,28 @@ function BusinessBody({
         {business.address}
         {business.distanceKm != null ? ` · ${formatDistance(business.distanceKm)} away` : ""}
       </p>
-      {activeJobs.length === 0 && leads.length === 0 ? (
+      {activeJobs.length > 0 ? (
+        <p className="mt-3 rounded-xl bg-job-soft px-3 py-2 text-sm font-semibold text-job">Hiring</p>
+      ) : (
         <p className="mt-3 rounded-xl bg-place-soft px-3 py-2 text-sm text-place">
           No public vacancy found. You can visit and ask if they are currently hiring.
         </p>
-      ) : null}
+      )}
       <FactList
         rows={[
           { label: "Category", value: categoryLabel(business.category) },
+          { label: "Address", value: business.address },
+          { label: "Postal code", value: business.postalCode ?? null },
           { label: "Area", value: business.area },
           { label: "Hours", value: business.openingHours ?? null },
           { label: "Phone", value: business.phone ?? null },
-          { label: "Website", value: business.website ?? null },
         ]}
       />
+      {business.website ? (
+        <a href={business.website} target="_blank" rel="noreferrer" className="mt-4 inline-flex text-sm font-semibold">
+          Website
+        </a>
+      ) : null}
       <RecordActions
         canSave={false}
         stop={{
@@ -348,8 +420,9 @@ function BusinessBody({
                   <span className="font-semibold">{job.title}</span>
                   <span className="mt-1 block text-sm text-muted">
                     {jobTypeLabel(job.jobType)}
-                    {job.salaryLabel ? ` · ${job.salaryLabel}` : " · Salary not listed"}
+                    {job.salaryLabel ? ` · ${job.salaryLabel}` : ""}
                   </span>
+                  <span className="mt-2 inline-flex text-sm font-semibold">View job</span>
                 </button>
               </li>
             ))}
@@ -364,7 +437,9 @@ function BusinessBody({
               <li key={lead.id}>
                 <button type="button" onClick={() => onOpen(lead.id, "community_lead")} className="w-full rounded-2xl border border-line px-3 py-2 text-left">
                   <span className="font-semibold">{lead.title}</span>
-                  <span className="mt-1 block text-sm text-muted">{lead.confirmYes} confirmed</span>
+                  <span className="mt-1 block text-sm text-muted">
+                    {lead.status === "FILLED" ? "Hiring finished" : `${lead.confirmYes} confirmed`}
+                  </span>
                 </button>
               </li>
             ))}

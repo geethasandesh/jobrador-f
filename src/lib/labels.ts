@@ -59,3 +59,11 @@ export function jobTypeLabel(value: string): string {
 export function categoryLabel(value: string): string {
   return CATEGORY_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
+
+export function sourceLabel(value: string): string {
+  if (value === "kleinanzeigen") return "Kleinanzeigen";
+  if (value === "arbeitsagentur") return "Arbeitsagentur";
+  if (value === "career_page") return "Business website";
+  if (value === "jobsnjoy") return "Jobs&Joy";
+  return value;
+}

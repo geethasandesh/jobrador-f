@@ -6,7 +6,7 @@ import { SampleBanner } from "@/components/sample-banner";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { getJob } from "@/lib/api/client";
 import { formatDistance, formatWhen } from "@/lib/format";
-import { categoryLabel, jobTypeLabel } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, sourceLabel } from "@/lib/labels";
 import { backToMap, readOrigin } from "@/lib/origin";
 
 export default async function JobPage({
@@ -62,7 +62,7 @@ export default async function JobPage({
           { label: "Salary", value: job.salaryLabel ?? null },
           { label: "Language", value: job.languageLabel ?? null },
           { label: "Posted", value: posted },
-          { label: "Source", value: job.sourceName },
+          { label: "Source", value: sourceLabel(job.sourceName) },
         ]}
       />
       <p className="mt-6 text-base leading-7">{job.descriptionSummary}</p>

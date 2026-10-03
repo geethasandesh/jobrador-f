@@ -60,60 +60,35 @@ textarea {
   border: 0;
 }
 
-.place-pin {
+.dot-pin {
   display: flex;
-  width: 46px;
-  height: 54px;
+  width: 64px;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border-radius: 14px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
-  background: #fff;
-  color: #8a8f98;
-  box-shadow: 0 8px 18px rgba(17, 17, 17, 0.12);
+  color: #fff;
 }
 
-.place-pin strong {
+.dot-pin strong {
+  margin-top: 2px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: #fff;
   color: #222;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  line-height: 1;
-}
-
-.place-pin.is-selected {
-  background: #161616;
-  color: #fff;
-}
-
-.place-pin.is-selected strong {
-  color: #fff;
-}
-
-.map-cluster {
-  display: inline-flex;
-  height: 34px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border-radius: 12px;
-  background: #fff;
-  color: #222;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  box-shadow: 0 8px 18px rgba(17, 17, 17, 0.14);
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(17, 17, 17, 0.16);
 }
 
 .pin {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   border: 2px solid white;
+  color: #fff;
   box-shadow: 0 4px 10px rgba(17, 17, 17, 0.28);
 }
 
@@ -127,6 +102,10 @@ textarea {
 
 .pin-place {
   background: #f59e0b;
+}
+
+.pin-unknown {
+  background: #9ca3af;
 }
 
 .pin-selected {

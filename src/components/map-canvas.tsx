@@ -14,6 +14,7 @@ export type MapMarker = {
   subtitle: string;
   label: string;
   href: string;
+  tone?: "unknown";
 };
 
 type MapCanvasProps = {
@@ -22,6 +23,7 @@ type MapCanvasProps = {
   markers: MapMarker[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onPick?: (latitude: number, longitude: number) => void;
 };
 
 const icons: Record<Kind, string> = {
@@ -37,45 +39,13 @@ function zoomForRadius(radiusKm: number) {
   return 12;
 }
 
-function pinHtml(kind: Kind, label: string, selected: boolean) {
-  return `<span class="place-pin${selected ? " is-selected" : ""}">${icons[kind]}<strong>${label}</strong></span>`;
-}
-
-function clusterMarkers(items: MapMarker[], map: import("leaflet").Map) {
-  const radius = 48;
-  const points = items.map((item) => ({
-    item,
-    point: map.latLngToLayerPoint([item.latitude, item.longitude]),
-  }));
-  const used = new Set<string>();
-  const groups: Array<{ items: MapMarker[]; latitude: number; longitude: number }> = [];
-
-  for (const entry of points) {
-    if (used.has(entry.item.id)) continue;
-    const members = [entry];
-    used.add(entry.item.id);
-    for (const other of points) {
-      if (used.has(other.item.id)) continue;
-      const dx = entry.point.x - other.point.x;
-      const dy = entry.point.y - other.point.y;
-      if (dx * dx + dy * dy <= radius * radius) {
-        members.push(other);
-        used.add(other.item.id);
-      }
-    }
-    groups.push({
-      items: members.map((member) => member.item),
-      latitude: members.reduce((sum, member) => sum + member.item.latitude, 0) / members.length,
-      longitude: members.reduce((sum, member) => sum + member.item.longitude, 0) / members.length,
-    });
-  }
-
-  return groups;
+function pinHtml(kind: Kind, label: string, selected: boolean, tone?: "unknown") {
+  const pinTone = tone === "unknown" ? "unknown" : kind === "community_lead" ? "lead" : kind === "nearby_business" ? "place" : "job";
+  return `<span class="dot-pin${selected ? " is-selected" : ""}"><span class="pin pin-${pinTone}${selected ? " pin-selected" : ""}">${icons[kind]}</span><strong>${label}</strong></span>`;
 }
 
 function paintMarkers(
   leaflet: typeof import("leaflet"),
-  map: import("leaflet").Map,
   layer: import("leaflet").LayerGroup,
   items: MapMarker[],
   selectedId: string | null,
@@ -93,48 +63,29 @@ function paintMarkers(
     })
     .addTo(layer);
 
-  for (const group of clusterMarkers(items, map)) {
-    if (group.items.length === 1) {
-      const item = group.items[0];
-      const selected = item.id === selectedId;
-      const marker = leaflet.marker([item.latitude, item.longitude], {
-        keyboard: true,
-        title: item.title,
-        zIndexOffset: selected ? 800 : 0,
-        icon: leaflet.divIcon({
-          className: "pin-wrap",
-          html: pinHtml(item.kind, item.label, selected),
-          iconSize: [46, 54],
-          iconAnchor: [23, 27],
-        }),
-      });
-      marker.on("click", () => {
-        onSelect(item.id);
-        document.getElementById(`card-${item.id}`)?.scrollIntoView({ block: "nearest" });
-      });
-      marker.addTo(layer);
-      continue;
-    }
-
-    const count = group.items.length;
-    const marker = leaflet.marker([group.latitude, group.longitude], {
+  for (const item of items) {
+    const selected = item.id === selectedId;
+    const marker = leaflet.marker([item.latitude, item.longitude], {
       keyboard: true,
-      title: `${count} places`,
+      title: item.label,
+      zIndexOffset: selected ? 800 : 0,
       icon: leaflet.divIcon({
         className: "pin-wrap",
-        html: `<span class="map-cluster">${count} places</span>`,
-        iconSize: [96, 34],
-        iconAnchor: [48, 17],
+        html: pinHtml(item.kind, item.label, selected, item.tone),
+        iconSize: [64, 46],
+        iconAnchor: [32, 16],
       }),
     });
-    marker.on("click", () => {
-      map.flyTo([group.latitude, group.longitude], Math.min(map.getZoom() + 2, 17));
+    marker.on("click", (event) => {
+      leaflet.DomEvent.stopPropagation(event);
+      onSelect(item.id);
+      document.getElementById(`card-${item.id}`)?.scrollIntoView({ block: "nearest" });
     });
     marker.addTo(layer);
   }
 }
 
-export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect }: MapCanvasProps) {
+export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onPick }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
@@ -143,7 +94,10 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect }: M
   const radiusRef = useRef(radiusKm);
   const centerRef = useRef(center);
   const onSelectRef = useRef(onSelect);
+  const onPickRef = useRef(onPick);
   const [ready, setReady] = useState(false);
+  // Extra hook so a hot reload remounts the map and drops any old cluster markers.
+  useEffect(() => {}, []);
 
   useEffect(() => {
     markersRef.current = markers;
@@ -151,7 +105,8 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect }: M
     radiusRef.current = radiusKm;
     centerRef.current = center;
     onSelectRef.current = onSelect;
-  }, [markers, selectedId, radiusKm, center, onSelect]);
+    onPickRef.current = onPick;
+  }, [markers, selectedId, radiusKm, center, onSelect, onPick]);
 
   useEffect(() => {
     let disposed = false;
@@ -174,11 +129,13 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect }: M
       map.setView([center.latitude, center.longitude], zoomForRadius(radiusKm));
       window.setTimeout(() => map.invalidateSize(), 0);
       const layer = leaflet.layerGroup().addTo(map);
+      map.on("click", (event) => {
+        onPickRef.current?.(event.latlng.lat, event.latlng.lng);
+      });
       map.on("zoomend moveend", () => {
         if (!mapRef.current || !layerRef.current) return;
         paintMarkers(
           leaflet,
-          mapRef.current,
           layerRef.current,
           markersRef.current,
           selectedRef.current,
@@ -213,18 +170,12 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect }: M
   useEffect(() => {
     if (!ready || !mapRef.current || !layerRef.current) return;
     let cancelled = false;
-    const map = mapRef.current;
     const layer = layerRef.current;
 
     (async () => {
       const leaflet = await import("leaflet");
       if (cancelled) return;
-      paintMarkers(leaflet, map, layer, markers, selectedId, radiusKm, centerRef.current, (id) => onSelectRef.current(id));
-      const hidden = clusterMarkers(markers, map).find(
-        (group) => group.items.length > 1 && group.items.some((item) => item.id === selectedId),
-      );
-      const selected = hidden?.items.find((item) => item.id === selectedId);
-      if (selected) map.flyTo([selected.latitude, selected.longitude], Math.max(map.getZoom(), 16));
+      paintMarkers(leaflet, layer, markers, selectedId, radiusKm, centerRef.current, (id) => onSelectRef.current(id));
     })();
 
     return () => {

@@ -9,9 +9,9 @@ import { OpportunityCard } from "@/components/opportunity-card";
 import { PlacePanel } from "@/features/show/explore/place-panel";
 import { ReportForm } from "@/features/show/report/report-form";
 import { SampleBanner } from "@/components/sample-banner";
-import { ApiError, getOpportunities } from "@/lib/api/client";
+import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
 import type { Kind, OpportunityList } from "@/lib/api/types";
-import { compactDistance } from "@/lib/format";
+import { markersFromOpportunities } from "@/lib/map-markers";
 import {
   CATEGORY_OPTIONS,
   JOB_TYPE_OPTIONS,
@@ -31,6 +31,16 @@ const KINDS: Array<{ id: Kind; label: string }> = [
 
 const RADII = ["1", "2", "5", "10"];
 
+const PLACE_FILTERS = [
+  { value: "restaurant", label: "Restaurant" },
+  { value: "cafe", label: "Café" },
+  { value: "hotel", label: "Hotel" },
+  { value: "retail", label: "Retail" },
+  { value: "warehouse", label: "Warehouse" },
+  { value: "logistics", label: "Logistics" },
+  { value: "other", label: "Other" },
+];
+
 function param(value: string | null, fallback = "") {
   return value ?? fallback;
 }
@@ -38,7 +48,9 @@ function param(value: string | null, fallback = "") {
 export function ExploreScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [draftQuery, setDraftQuery] = useState(param(searchParams.get("q")));
+  const [draftQuery, setDraftQuery] = useState("");
+  const [placeHits, setPlaceHits] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
+  const [searching, setSearching] = useState(true);
   const [data, setData] = useState<OpportunityList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -60,7 +72,7 @@ export function ExploreScreen() {
   if (requestedPanel !== seenPanel) {
     setSeenPanel(requestedPanel);
     if (requestedPanel === "visits") setPanel("visits");
-    if (requestedPanel === "report") setPanel("report");
+    if (requestedPanel === "report" || requestedPanel === "share") setPanel("report");
     if (requestedPanel === "saved") {
       setPanel("list");
       setSavedOnly(true);
@@ -79,30 +91,49 @@ export function ExploreScreen() {
   const sort = param(searchParams.get("sort"), "distance");
   const kinds = searchParams.get("kinds");
   const filtersKey = `${searchParams.toString()}#${reloadKey}`;
-  const [seenQuery, setSeenQuery] = useState(q);
   const [requestKey, setRequestKey] = useState(filtersKey);
   const [loading, setLoading] = useState(true);
-
-  if (q !== seenQuery) {
-    setSeenQuery(q);
-    setDraftQuery(q);
-  }
 
   if (requestKey !== filtersKey) {
     setRequestKey(filtersKey);
     setLoading(true);
+    setSearching(true);
     setError(null);
   }
 
   useEffect(() => {
+    const query = draftQuery.trim();
+    if (query.length < 2 || query === label) {
+      setPlaceHits([]);
+      return;
+    }
+    const controller = new AbortController();
     const handle = window.setTimeout(() => {
-      if (draftQuery === q) return;
-      update({ q: draftQuery || null });
-    }, 300);
-    return () => window.clearTimeout(handle);
-    // update closes over the latest search params via the function below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftQuery, q]);
+      searchPlaces(query, controller.signal)
+        .then((result) => {
+          if (!controller.signal.aborted) setPlaceHits(result.places);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setPlaceHits([]);
+        });
+    }, 250);
+    return () => {
+      controller.abort();
+      window.clearTimeout(handle);
+    };
+  }, [draftQuery, label]);
+
+  function choosePlace(place: { label: string; latitude: number; longitude: number }) {
+    setDraftQuery(place.label);
+    setPlaceHits([]);
+    setNotice(null);
+    update({
+      lat: String(place.latitude),
+      lng: String(place.longitude),
+      label: place.label,
+      q: null,
+    });
+  }
 
   function update(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -118,34 +149,54 @@ export function ExploreScreen() {
 
   useEffect(() => {
     const controller = new AbortController();
-    getOpportunities(
-      {
-        latitude,
-        longitude,
-        radiusKm: Number.isFinite(radiusKm) ? radiusKm : 5,
-        q: q || undefined,
-        jobType: jobType || undefined,
-        category: category || undefined,
-        kinds: kinds || undefined,
-        language: language || undefined,
-        salary: salary || undefined,
-        sort,
-      },
-      controller.signal,
-    )
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setData(result);
-        setError(null);
-        setLoading(false);
-      })
-      .catch((caught: unknown) => {
-        if (controller.signal.aborted) return;
-        if (caught instanceof DOMException && caught.name === "AbortError") return;
-        setLoading(false);
-        setError(caught instanceof ApiError ? caught.message : "Could not load the map.");
-      });
-    return () => controller.abort();
+    let timer = 0;
+    let attempt = 0;
+    let lastTotal = -1;
+    let stable = 0;
+
+    const load = () => {
+      getOpportunities(
+        {
+          latitude,
+          longitude,
+          radiusKm: Number.isFinite(radiusKm) ? radiusKm : 5,
+          q: q || undefined,
+          jobType: jobType || undefined,
+          category: category || undefined,
+          kinds: kinds || undefined,
+          language: language || undefined,
+          salary: salary || undefined,
+          sort,
+        },
+        controller.signal,
+      )
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          setData(result);
+          setError(null);
+          setLoading(false);
+          if (result.total === lastTotal) stable += 1;
+          else stable = 0;
+          lastTotal = result.total;
+          attempt += 1;
+          const keepLooking = attempt < 5 && stable < 2;
+          setSearching(keepLooking);
+          if (keepLooking) timer = window.setTimeout(load, 4000);
+        })
+        .catch((caught: unknown) => {
+          if (controller.signal.aborted) return;
+          if (caught instanceof DOMException && caught.name === "AbortError") return;
+          setLoading(false);
+          setSearching(false);
+          setError(caught instanceof ApiError ? caught.message : "Could not load the map.");
+        });
+    };
+
+    load();
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
   }, [filtersKey, reloadKey, latitude, longitude, radiusKm, q, jobType, category, kinds, language, salary, sort]);
 
   const activeKinds = useMemo(() => {
@@ -155,23 +206,14 @@ export function ExploreScreen() {
 
   const markers: MapMarker[] = useMemo(
     () =>
-      (data?.items ?? []).map((item) => {
+      markersFromOpportunities(data?.items ?? [], (item) => {
         const params = new URLSearchParams({
           lat: String(latitude),
           lng: String(longitude),
         });
         const path =
           item.kind === "job" ? "jobs" : item.kind === "community_lead" ? "leads" : "businesses";
-        return {
-          id: item.id,
-          kind: item.kind,
-          latitude: item.latitude,
-          longitude: item.longitude,
-          title: item.businessName,
-          subtitle: item.kind === "nearby_business" ? "No public vacancy" : item.title,
-          label: compactDistance(item.distanceKm),
-          href: `/${path}/${item.id}?${params}`,
-        };
+        return `/${path}/${item.id}?${params}`;
       }),
     [data, latitude, longitude],
   );
@@ -196,6 +238,7 @@ export function ExploreScreen() {
           lat: String(position.coords.latitude),
           lng: String(position.coords.longitude),
           label: "Your location",
+          q: null,
         });
       },
       () => setNotice("Location was blocked. Pick a Berlin area instead."),
@@ -230,21 +273,54 @@ export function ExploreScreen() {
         <div className="hidden shrink-0 sm:block">
           <Logo compact />
         </div>
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]">
-          <span className="sr-only">Search jobs</span>
+        <div className="relative min-w-0 flex-1">
+        <form
+          className="flex min-w-0 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const place = placeHits[0];
+            if (place) choosePlace(place);
+            else setNotice("Enter a Berlin postal code or area name.");
+          }}
+        >
+          <span className="sr-only">Search a Berlin area</span>
           <SearchIcon />
           <input
             value={draftQuery}
             onChange={(event) => setDraftQuery(event.target.value)}
-            placeholder="Search jobs, places, or areas"
+            placeholder="Postal code or area in Berlin"
             className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
           />
           {draftQuery ? (
-            <button type="button" className="px-2 text-muted" onClick={() => setDraftQuery("")} aria-label="Clear search">
+            <button
+              type="button"
+              className="px-2 text-muted"
+              onClick={() => {
+                setDraftQuery("");
+                setPlaceHits([]);
+              }}
+              aria-label="Clear search"
+            >
               ×
             </button>
           ) : null}
-        </label>
+        </form>
+        {placeHits.length > 0 ? (
+          <ul className="absolute top-[calc(100%+6px)] right-0 left-0 z-[800] overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-lg">
+            {placeHits.map((place) => (
+              <li key={`${place.label}-${place.latitude}`}>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-50"
+                  onClick={() => choosePlace(place)}
+                >
+                  {place.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
@@ -290,10 +366,29 @@ export function ExploreScreen() {
           setPinnedKind(null);
           setPanel(null);
         }}
+        onPick={(nextLatitude, nextLongitude) => {
+          const inside =
+            nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
+          if (!inside) {
+            setNotice("For now, the map stays in Berlin.");
+            return;
+          }
+          setNotice(null);
+          setDraftQuery("");
+          update({
+            lat: nextLatitude.toFixed(5),
+            lng: nextLongitude.toFixed(5),
+            label: "Chosen spot, Berlin",
+            q: null,
+          });
+        }}
       />
 
-      <div className="absolute left-1/2 top-4 z-[700] -translate-x-1/2">
+      <div className="absolute left-1/2 top-4 z-[700] flex -translate-x-1/2 flex-col items-center gap-2">
         <SampleBanner dataSource={data?.dataSource} />
+        {searching ? (
+          <p className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm">Looking in this circle…</p>
+        ) : null}
       </div>
 
       <nav className="absolute top-4 left-3 z-[700] hidden w-16 flex-col items-center gap-1 rounded-2xl bg-white py-2 text-[10px] font-medium text-muted shadow-[0_10px_30px_rgba(17,17,17,0.1)] sm:flex">
@@ -307,7 +402,7 @@ export function ExploreScreen() {
           <FilterIcon />
         </RailButton>
         <RailButton
-          label="Report"
+          label="Share"
           active={panel === "report"}
           onClick={() => {
             setSelectedId(null);
@@ -325,8 +420,8 @@ export function ExploreScreen() {
           {panel === "report" ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between px-4 pt-4">
-                <h2 className="text-lg font-bold tracking-tight">Report a lead</h2>
-                <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close report">
+                <h2 className="text-lg font-bold tracking-tight">Share a tip</h2>
+                <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
                   ×
                 </button>
               </div>
@@ -406,6 +501,7 @@ export function ExploreScreen() {
                         lat: String(place.latitude),
                         lng: String(place.longitude),
                         label: place.label,
+                        q: null,
                       })
                     }
                     className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${label === place.label ? "bg-ink text-white" : "bg-zinc-100 text-ink"}`}
@@ -423,6 +519,19 @@ export function ExploreScreen() {
                     className={`rounded-full px-3 py-1.5 text-sm ${String(radiusKm) === radius ? "bg-ink text-white" : "bg-zinc-100"}`}
                   >
                     {radius} km
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PLACE_FILTERS.map((place) => (
+                  <button
+                    key={place.value}
+                    type="button"
+                    aria-pressed={category === place.value}
+                    onClick={() => update({ category: category === place.value ? null : place.value })}
+                    className={`rounded-full px-3 py-1.5 text-sm ${category === place.value ? "bg-ink text-white" : "bg-zinc-100"}`}
+                  >
+                    {place.label}
                   </button>
                 ))}
               </div>
@@ -484,7 +593,7 @@ export function ExploreScreen() {
               <div className="flex items-center justify-between gap-3 px-4 pt-4">
                 <div>
                   <h2 className="text-lg font-bold tracking-tight">{label.split(",")[0]}</h2>
-                  <p className="text-sm text-muted">{loading ? "Updating…" : `${visibleItems.length} places`}</p>
+                  <p className="text-sm text-muted">{loading || searching ? "Looking in this circle…" : `${visibleItems.length} places`}</p>
                 </div>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close list">
                   ×
@@ -509,7 +618,11 @@ export function ExploreScreen() {
                 ) : null}
                 {!error && !loading && visibleItems.length === 0 ? (
                   <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">
-                    {savedOnly ? "No saved jobs in this view." : "Nothing in this radius matches those filters."}
+                    {savedOnly
+                      ? "No saved jobs in this view."
+                      : searching
+                        ? "Looking around this part of Berlin. Pins show up as places are found."
+                        : "Nothing in this radius matches those filters."}
                   </p>
                 ) : null}
                 {visibleItems.map((item) => (
@@ -569,7 +682,7 @@ export function ExploreScreen() {
           <RouteIcon />
         </RailButton>
         <RailButton
-          label="Report"
+          label="Share"
           active={panel === "report"}
           onClick={() => {
             setSelectedId(null);

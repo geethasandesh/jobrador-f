@@ -15,7 +15,15 @@ export function OpportunityCard({
   onOpen: () => void;
 }) {
   const when = formatWhen(item.recency);
-  const secondLine = item.kind === "nearby_business" ? "No public vacancy" : item.title;
+  const hiring = item.kind === "nearby_business" && Boolean(item.hiring);
+  const unchecked = item.status === "UNCHECKED";
+  const secondLine = hiring
+    ? (item.linkedJobTitle ?? "Hiring")
+    : unchecked
+      ? "Not checked yet"
+      : item.kind === "nearby_business"
+        ? "No public vacancy found"
+        : item.title;
 
   return (
     <article
@@ -25,7 +33,7 @@ export function OpportunityCard({
       className={`rounded-2xl border bg-white p-3 shadow-sm ${selected ? "border-ink" : "border-line"}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <KindBadge kind={item.kind} />
+        <KindBadge kind={item.kind} hiring={hiring} />
         <span className="text-sm text-muted">{formatDistance(item.distanceKm)} away</span>
       </div>
       <h3 className="mt-2 text-base font-semibold text-ink">{item.businessName}</h3>
@@ -41,7 +49,7 @@ export function OpportunityCard({
           {(item.confirmNo ?? 0) > 0
             ? ` · ${item.confirmNo} ${item.confirmNo === 1 ? "says" : "say"} outdated`
             : ""}
-          {when ? ` · reported ${when}` : ""}
+          {when ? ` · shared ${when}` : ""}
         </p>
       ) : null}
       {item.kind === "job" && when ? (

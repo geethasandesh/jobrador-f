@@ -41,10 +41,12 @@ export default async function LeadPage({
       <p className="mt-1 text-sm text-muted">
         {lead.address}
         {lead.distanceKm != null ? ` · ${formatDistance(lead.distanceKm)} away` : ""}
-        {reported ? ` · reported ${reported}` : ""}
+        {reported ? ` · shared ${reported}` : ""}
       </p>
       <p className="mt-4 rounded-2xl bg-lead-soft px-4 py-3 text-sm text-lead">
-        A student reported this. It is not a confirmed vacancy.
+        {lead.status === "FILLED"
+          ? "Hiring is finished. This tip is no longer on the map."
+          : "A student shared this. It is not a confirmed vacancy."}
       </p>
       <blockquote className="mt-6 border-l-4 border-lead pl-4 text-base leading-7">
         {lead.description}
@@ -68,7 +70,13 @@ export default async function LeadPage({
       ) : null}
       <ConfirmLead
         id={lead.id}
-        initial={{ yes: lead.confirmYes, no: lead.confirmNo, unsure: lead.confirmUnsure }}
+        initial={{
+          yes: lead.confirmYes,
+          no: lead.confirmNo,
+          unsure: lead.confirmUnsure,
+          done: lead.confirmDone,
+          status: lead.status,
+        }}
       />
       <RecordActions
         canSave={false}

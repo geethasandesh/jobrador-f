@@ -48,6 +48,11 @@ export type Opportunity = {
   confirmNo?: number;
   confirmUnsure?: number;
   sourceName?: string;
+  hiring?: boolean;
+  linkedJobId?: string;
+  linkedJobTitle?: string;
+  linkedJobType?: string | null;
+  linkedJobIds?: string[];
 };
 
 export type OpportunityList = {
@@ -67,10 +72,12 @@ export type Business = {
   area: string;
   latitude: number;
   longitude: number;
+  postalCode?: string;
   phone?: string;
   website?: string;
   openingHours?: string;
   source: string;
+  sourceId?: string;
   distanceKm?: number | null;
 };
 
@@ -110,6 +117,7 @@ export type LeadRecord = {
   confirmYes: number;
   confirmNo: number;
   confirmUnsure: number;
+  confirmDone?: number;
   status: string;
   salaryLabel: string | null;
   languageLabel: string | null;

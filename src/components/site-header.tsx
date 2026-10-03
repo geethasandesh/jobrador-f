@@ -29,10 +29,10 @@ export function SiteHeader() {
       <div className="mx-auto flex h-[72px] w-full max-w-6xl items-center justify-between gap-4 px-5">
         <Logo />
         <nav className="flex items-center gap-1 text-sm font-medium text-ink sm:gap-2">
-          <Link href={destination("/map?panel=report")} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+          <Link href={destination("/map?panel=share")} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
             <PinIcon />
-            <span className="hidden sm:inline">Report a lead</span>
-            <span className="sm:hidden">Report</span>
+            <span className="hidden sm:inline">Share a tip</span>
+            <span className="sm:hidden">Share</span>
           </Link>
           <Link href={destination("/map?panel=visits")} className="inline-flex items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
             <RouteIcon />

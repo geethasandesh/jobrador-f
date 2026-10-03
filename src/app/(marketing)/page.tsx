@@ -1,5 +1,25 @@
+import { Instrument_Serif } from "next/font/google";
 import { ContainerScroll } from "@/components/ui/container-scroll-animation";
+import { HighlightQuote } from "@/features/marketing/highlight-quote";
+import { SiteColophon } from "@/features/marketing/site-colophon";
+import { StickyNotes } from "@/features/marketing/sticky-notes";
 import { LandingMap } from "@/features/marketing/landing-map";
+
+const serifItalic = Instrument_Serif({
+  weight: "400",
+  style: "italic",
+  subsets: ["latin"],
+});
+
+const listingLines = [
+  { before: "opened another", phrase: "listing page", after: "and scrolled the whole city" },
+  { before: "sorted", phrase: "newest first", after: "and lost what is two stops away" },
+  { before: "kept", phrase: "ten open tabs", after: "for a single Minijob" },
+  { before: "knew the title and still had", phrase: "no distance", after: "from where you are" },
+  { before: "missed", phrase: "the café nearby", after: "that was hiring all week" },
+  { before: "you can", phrase: "walk over and ask", after: "when the pin is on your route" },
+  { before: "jobrador puts that job", phrase: "on a map", after: "around you" },
+];
 
 export default function HomePage() {
   return (
@@ -46,6 +66,33 @@ export default function HomePage() {
           <br className="hidden sm:block" /> all the cool startups hiring on a map.
         </p>
       </section>
+
+      <section className="mx-auto w-full max-w-5xl px-6 pb-28 sm:px-10">
+        <h2 className="max-w-3xl text-[1.7rem] font-semibold leading-[1.15] tracking-[-0.03em] text-ink sm:text-[2.15rem]">
+          You scroll a listing page, because the job around the corner never makes the list.
+        </h2>
+        <ul className="mt-14 space-y-3 sm:mt-16 sm:space-y-3.5">
+          {listingLines.map((line) => (
+            <li
+              key={line.phrase}
+              className="flex items-baseline justify-center gap-[0.4em] overflow-hidden whitespace-nowrap text-[1.15rem] font-medium text-[#ececec] sm:text-[1.45rem]"
+              style={{
+                maskImage: "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)",
+              }}
+            >
+              <span className="blur-[1.4px]">{line.before}</span>
+              <span className={`${serifItalic.className} relative text-[1.35em] leading-none tracking-[-0.03em] text-ink blur-none`}>
+                {line.phrase}
+              </span>
+              <span className="blur-[1.4px]">{line.after}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <HighlightQuote />
+      <StickyNotes />
+      <SiteColophon />
     </main>
   );
 }

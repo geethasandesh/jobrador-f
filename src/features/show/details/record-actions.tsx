@@ -5,15 +5,17 @@ import { addRouteStop, toggleSavedJob, useJobSaved, useRoute, type RouteStop } f
 export function RecordActions({
   stop,
   canSave,
+  compact = false,
 }: {
   stop: RouteStop;
   canSave: boolean;
+  compact?: boolean;
 }) {
   const saved = useJobSaved(stop.id);
   const onRoute = useRoute().some((item) => item.id === stop.id);
 
   return (
-    <div className="mt-6 flex flex-wrap gap-2">
+    <div className={`${compact ? "mt-4" : "mt-6"} flex flex-wrap gap-2`}>
       {canSave ? (
         <button
           type="button"

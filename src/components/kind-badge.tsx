@@ -13,11 +13,12 @@ const dot: Record<Kind, string> = {
   nearby_business: "bg-[#e0a106]",
 };
 
-export function KindBadge({ kind }: { kind: Kind }) {
+export function KindBadge({ kind, hiring = false }: { kind: Kind; hiring?: boolean }) {
+  const tone = hiring ? "job" : kind;
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${style[kind]}`}>
-      <span className={`h-2 w-2 rounded-full ${dot[kind]}`} />
-      {KIND_LABEL[kind]}
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${style[tone]}`}>
+      <span className={`h-2 w-2 rounded-full ${dot[tone]}`} />
+      {hiring ? "Hiring" : KIND_LABEL[kind]}
     </span>
   );
 }

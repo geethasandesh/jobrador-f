@@ -5,6 +5,7 @@ import type {
   OpportunityList,
   SearchFilters,
 } from "./types";
+import { accessToken } from "../session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -46,6 +47,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, await failMessage(response));
   }
   return (await response.json()) as T;
+}
+
+export function searchPlaces(query: string, signal?: AbortSignal) {
+  return request<{ places: Array<{ label: string; latitude: number; longitude: number }> }>(
+    `/v1/places?q=${encodeURIComponent(query)}`,
+    { signal },
+  );
 }
 
 export function getOpportunities(filters: SearchFilters, signal?: AbortSignal) {
@@ -94,6 +102,12 @@ export function getBusiness(id: string, origin?: { latitude: number; longitude: 
   return getOrNull<BusinessDetail>(withOrigin(`/v1/businesses/${id}`, origin));
 }
 
+async function accountHeaders() {
+  const token = await accessToken();
+  if (!token) throw new ApiError(401, "Log in to share or update a tip.");
+  return { Authorization: `Bearer ${token}` };
+}
+
 export function createLead(body: {
   businessName: string;
   description: string;
@@ -107,15 +121,61 @@ export function createLead(body: {
   hoursMin?: number;
   hoursMax?: number;
 }) {
-  return request<LeadDetail>("/v1/leads", {
+  return accountHeaders().then((headers) =>
+    request<LeadDetail>("/v1/leads", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export type WallReaction = {
+  emoji: string;
+  count: number;
+  mine: boolean;
+};
+
+export type WallNote = {
+  id: string;
+  displayName: string;
+  body: string;
+  color: string;
+  status?: "pending" | "approved" | "rejected";
+  createdAt: string;
+  reactions: WallReaction[];
+};
+
+export function getWallNotes(deviceId: string) {
+  const params = new URLSearchParams({ deviceId });
+  return request<{ notes: WallNote[] }>(`/v1/wall?${params}`);
+}
+
+export function getMyWallNote(deviceId: string) {
+  const params = new URLSearchParams({ deviceId });
+  return request<{ note: WallNote | null }>(`/v1/wall/mine?${params}`);
+}
+
+export function reactToWallNote(noteId: string, body: { deviceId: string; emoji: string }) {
+  return request<{ reactions: WallReaction[] }>(`/v1/wall/${noteId}/reactions`, {
     method: "POST",
     body: JSON.stringify(body),
   });
 }
 
-export function confirmLead(id: string, status: "yes" | "no" | "unsure") {
-  return request<LeadDetail>(`/v1/leads/${id}/confirmations`, {
+export function stickWallNote(body: { displayName: string; body: string; color: string; deviceId: string }) {
+  return request<WallNote>("/v1/wall", {
     method: "POST",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(body),
   });
+}
+
+export function confirmLead(id: string, status: "yes" | "no" | "unsure" | "done") {
+  return accountHeaders().then((headers) =>
+    request<LeadDetail & { notice?: string }>(`/v1/leads/${id}/confirmations`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ status }),
+    }),
+  );
 }

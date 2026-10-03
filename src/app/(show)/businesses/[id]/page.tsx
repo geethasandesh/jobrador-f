@@ -94,7 +94,9 @@ export default async function BusinessPage({
               <li key={lead.id}>
                 <Link href={`/leads/${lead.id}${query}`} className="block rounded-2xl border border-line bg-card px-4 py-3">
                   <span className="font-semibold">{lead.title}</span>
-                  <span className="mt-1 block text-sm text-muted">{lead.confirmYes} confirmed</span>
+                  <span className="mt-1 block text-sm text-muted">
+                    {lead.status === "FILLED" ? "Hiring finished" : `${lead.confirmYes} confirmed`}
+                  </span>
                 </Link>
               </li>
             ))}
