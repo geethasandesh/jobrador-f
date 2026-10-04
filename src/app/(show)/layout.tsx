@@ -6,7 +6,7 @@ export default function ShowLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={<main className="grid min-h-dvh place-items-center text-sm text-muted">Login is required.</main>}>
       <RequireLogin>
-        <SiteHeader />
+        <SiteHeader kind="app" />
         {children}
       </RequireLogin>
     </Suspense>

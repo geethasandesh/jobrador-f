@@ -113,9 +113,9 @@ export function getBusiness(id: string, origin?: { latitude: number; longitude: 
   return getOrNull<BusinessDetail>(withOrigin(`/v1/businesses/${id}`, origin));
 }
 
-async function accountHeaders() {
+async function accountHeaders(message = "Log in to share or update a tip.") {
   const token = await accessToken();
-  if (!token) throw new ApiError(401, "Log in to share or update a tip.");
+  if (!token) throw new ApiError(401, message);
   return { Authorization: `Bearer ${token}` };
 }
 
@@ -224,6 +224,221 @@ export function requestPasswordEmail(email: string) {
     method: "POST",
     body: JSON.stringify({ email }),
   });
+}
+
+export type Referral = {
+  id: string;
+  authorName: string;
+  message: string;
+  url: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  mine: boolean;
+};
+
+export function getReferrals() {
+  return accountHeaders().then((headers) =>
+    request<{ referrals: Referral[]; admin: boolean; pendingCount: number }>("/v1/referrals", { headers }),
+  );
+}
+
+export function sendReferral(body: { message: string }) {
+  return accountHeaders().then((headers) =>
+    request<Referral>("/v1/referrals", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export function getReferralQueue() {
+  return accountHeaders().then((headers) =>
+    request<{ pending: Referral[]; history: Referral[] }>("/v1/referrals/queue", { headers }),
+  );
+}
+
+export function reviewReferral(id: string, action: "approve" | "reject") {
+  return accountHeaders().then((headers) =>
+    request<Referral>(`/v1/referrals/${id}/review`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action }),
+    }),
+  );
+}
+
+export type AdminOverview = {
+  counts: {
+    users: number | null;
+    referralsPending: number;
+    referralsApproved: number;
+    referralsDeclined: number;
+    bugReports: number;
+    bugsOpen: number;
+    closuresPending: number;
+    jobs: number;
+    tips: number;
+    businessPosts: number;
+    wallNotes: number;
+  };
+  accounts: Array<{ email: string; createdAt: string }> | null;
+  referrals: { pending: Referral[]; history: Referral[] };
+  bugs: Array<{ id: string; message: string; email: string | null; page: string | null; createdAt: string; handledAt: string | null }>;
+};
+
+export type LibraryKind = "job" | "community_lead" | "nearby_business";
+
+export type LibraryState = {
+  saved: Array<{ id: string; kind: LibraryKind }>;
+  visits: Array<{ id: string; kind: LibraryKind; title: string; subtitle: string; href: string }>;
+};
+
+export function readLibrary() {
+  return accountHeaders("Log in to see saved jobs.").then((headers) => request<LibraryState>("/v1/library", { headers }));
+}
+
+export function mergeLibrary(body: LibraryState) {
+  return accountHeaders("Log in to save a job.").then((headers) =>
+    request<LibraryState>("/v1/library/merge", { method: "POST", headers, body: JSON.stringify(body) }),
+  );
+}
+
+export function setLibrarySaved(body: { id: string; saved: boolean; kind: LibraryKind }) {
+  return accountHeaders("Log in to save a job.").then((headers) =>
+    request<{ ok: true }>("/v1/library/saved", { method: "POST", headers, body: JSON.stringify(body) }),
+  );
+}
+
+export function addLibraryVisit(body: LibraryState["visits"][number]) {
+  return accountHeaders("Log in to keep a visit list.").then((headers) =>
+    request<{ ok: true }>("/v1/library/visits", { method: "POST", headers, body: JSON.stringify(body) }),
+  );
+}
+
+export function removeLibraryVisit(id: string) {
+  return accountHeaders("Log in to keep a visit list.").then((headers) =>
+    request<{ ok: true }>(`/v1/library/visits/${encodeURIComponent(id)}`, { method: "DELETE", headers }),
+  );
+}
+
+export type ClosureReport = {
+  id: string;
+  jobId: string;
+  placeName: string;
+  jobTitle: string;
+  status: "pending" | "confirmed" | "dismissed";
+  createdAt: string;
+};
+
+export function myClosure(jobId: string) {
+  return accountHeaders("Log in to report a closed posting.").then((headers) =>
+    request<{ report: ClosureReport | null }>(`/v1/closures?jobId=${encodeURIComponent(jobId)}`, { headers }),
+  );
+}
+
+export function reportClosed(jobId: string) {
+  return accountHeaders("Log in to report a closed posting.").then((headers) =>
+    request<ClosureReport>("/v1/closures", { method: "POST", headers, body: JSON.stringify({ jobId }) }),
+  );
+}
+
+export type AdminPlaceTone = "unchecked" | "hiring" | "empty" | "tip";
+
+export type AdminPlace = {
+  id: string;
+  tone: AdminPlaceTone;
+  name: string;
+  area: string | null;
+  address: string;
+  detail: string;
+  href: string;
+};
+
+export function getAdminPlaces(tone: AdminPlaceTone, query: string) {
+  const params = new URLSearchParams({ tone });
+  if (query) params.set("q", query);
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ tone: AdminPlaceTone; counts: Record<AdminPlaceTone, number>; places: AdminPlace[] }>(`/v1/admin/places?${params}`, { headers }),
+  );
+}
+
+export type AdminPost = {
+  id: string;
+  poster: "student" | "business";
+  name: string;
+  title: string;
+  area: string | null;
+  hidden: boolean;
+  createdAt: string;
+};
+
+export function getAdminPosts() {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ posts: AdminPost[] }>("/v1/admin/posts", { headers }),
+  );
+}
+
+export function setAdminPostHidden(id: string, hidden: boolean) {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ ok: true }>(`/v1/admin/posts/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ hidden }),
+    }),
+  );
+}
+
+export type AdminWallNote = {
+  id: string;
+  displayName: string;
+  body: string;
+  hidden: boolean;
+  createdAt: string;
+};
+
+export function getAdminWall() {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ notes: AdminWallNote[] }>("/v1/admin/wall", { headers }),
+  );
+}
+
+export function setAdminNoteHidden(id: string, hidden: boolean) {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ ok: true }>(`/v1/admin/wall/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ hidden }),
+    }),
+  );
+}
+
+export function markBugHandled(id: string) {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ ok: true }>(`/v1/admin/bugs/${encodeURIComponent(id)}/handle`, { method: "POST", headers }),
+  );
+}
+
+export function getAdminClosures() {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ pending: ClosureReport[]; history: ClosureReport[] }>("/v1/admin/closures", { headers }),
+  );
+}
+
+export function reviewClosure(id: string, action: "confirm" | "dismiss") {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<{ ok: true }>(`/v1/admin/closures/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action }),
+    }),
+  );
+}
+
+export function getAdminOverview() {
+  return accountHeaders("Log in to open the admin dashboard.").then((headers) =>
+    request<AdminOverview>("/v1/admin/overview", { headers }),
+  );
 }
 
 export function sendBugReport(body: { message: string; email?: string; page?: string }) {

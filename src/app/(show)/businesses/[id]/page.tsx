@@ -57,7 +57,7 @@ export default async function BusinessPage({
         ]}
       />
       <RecordActions
-        canSave={false}
+        canSave
         stop={{
           id: business.id,
           kind: "nearby_business",

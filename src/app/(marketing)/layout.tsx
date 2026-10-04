@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { SiteHeader } from "@/components/site-header";
+import { PublicGate } from "@/features/marketing/public-gate";
 import { CloudShader } from "@/components/ui/cloud-shader";
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
@@ -7,7 +8,10 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
     <div className="relative min-h-dvh">
       <CloudShader className="pointer-events-none inset-0 z-0 !fixed !h-dvh !min-h-0" />
       <div className="relative z-10">
-        <SiteHeader />
+        <Suspense fallback={null}>
+          <PublicGate />
+        </Suspense>
+        <SiteHeader kind="public" />
         {children}
       </div>
     </div>

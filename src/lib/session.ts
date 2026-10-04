@@ -94,4 +94,8 @@ export async function signOut() {
   if (!isAuthConfigured()) return;
   const { error } = await getSupabase().auth.signOut();
   if (error) throw new Error(message(error));
+  window.localStorage.removeItem("jobrador.savedJobs");
+  window.localStorage.removeItem("jobrador.route");
+  window.localStorage.removeItem("jobrador.library-account");
+  window.dispatchEvent(new Event("jobrador-storage"));
 }

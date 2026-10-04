@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { FactList } from "@/components/fact-list";
 import { KindBadge } from "@/components/kind-badge";
 import { SampleBanner } from "@/components/sample-banner";
+import { ClosedReport } from "@/features/show/details/closed-report";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { getJob } from "@/lib/api/client";
 import { formatDistance, formatWhen } from "@/lib/format";
@@ -79,6 +80,7 @@ export default async function JobPage({
       <p className="mt-2 text-sm text-muted">
         This opens the job’s own page. jobrador does not send the application.
       </p>
+      <ClosedReport jobId={job.id} active={job.status === "ACTIVE"} />
       <RecordActions
         canSave
         stop={{

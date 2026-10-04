@@ -1,15 +1,35 @@
 import { useSyncExternalStore } from "react";
+import {
+  addLibraryVisit,
+  mergeLibrary,
+  readLibrary,
+  removeLibraryVisit,
+  setLibrarySaved,
+  type LibraryKind,
+} from "./api/client";
 
 export type RouteStop = {
   id: string;
-  kind: "job" | "community_lead" | "nearby_business";
+  kind: LibraryKind;
   title: string;
   subtitle: string;
   href: string;
 };
 
+export type SavedItem = {
+  id: string;
+  kind: LibraryKind;
+};
+
 const ROUTE_KEY = "jobrador.route";
 const SAVED_KEY = "jobrador.savedJobs";
+const ADOPT_KEY = "jobrador.library-account";
+
+let persistQueue: Promise<void> = Promise.resolve();
+
+function enqueue(task: () => Promise<void>) {
+  persistQueue = persistQueue.then(task).catch(() => undefined);
+}
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -34,6 +54,7 @@ export function readRoute(): RouteStop[] {
 export function addRouteStop(stop: RouteStop) {
   const without = readRoute().filter((item) => item.id !== stop.id);
   writeJson(ROUTE_KEY, [...without, stop]);
+  enqueue(() => addLibraryVisit(stop).then(() => undefined));
 }
 
 export function removeRouteStop(id: string) {
@@ -41,21 +62,55 @@ export function removeRouteStop(id: string) {
     ROUTE_KEY,
     readRoute().filter((item) => item.id !== id),
   );
+  enqueue(() => removeLibraryVisit(id).then(() => undefined));
+}
+
+function asKind(value: unknown): LibraryKind {
+  return value === "community_lead" || value === "nearby_business" ? value : "job";
+}
+
+export function readSavedItems(): SavedItem[] {
+  const value = readJson<unknown>(SAVED_KEY, []);
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string" && item) return [{ id: item, kind: "job" as const }];
+    if (!item || typeof item !== "object") return [];
+    const id = (item as { id?: unknown }).id;
+    if (typeof id !== "string" || !id) return [];
+    return [{ id, kind: asKind((item as { kind?: unknown }).kind) }];
+  });
 }
 
 export function readSavedJobs(): string[] {
-  const value = readJson<string[]>(SAVED_KEY, []);
-  return Array.isArray(value) ? value : [];
+  return readSavedItems().map((item) => item.id);
 }
 
-export function toggleSavedJob(id: string): boolean {
-  const current = readSavedJobs();
-  const saved = current.includes(id);
+export function toggleSavedJob(id: string, kind: LibraryKind = "job"): boolean {
+  const current = readSavedItems();
+  const saved = current.some((item) => item.id === id);
   writeJson(
     SAVED_KEY,
-    saved ? current.filter((item) => item !== id) : [...current, id],
+    saved ? current.filter((item) => item.id !== id) : [...current, { id, kind }],
   );
+  enqueue(() => setLibrarySaved({ id, saved: !saved, kind }).then(() => undefined));
   return !saved;
+}
+
+export async function adoptLibrary(accountId: string) {
+  const adopted = window.localStorage.getItem(ADOPT_KEY);
+  const remote = adopted === accountId
+    ? await readLibrary()
+    : await mergeLibrary({ saved: readSavedItems(), visits: readRoute() });
+  writeJson(SAVED_KEY, remote.saved);
+  writeJson(ROUTE_KEY, remote.visits);
+  window.localStorage.setItem(ADOPT_KEY, accountId);
+}
+
+export function clearLibraryCache() {
+  window.localStorage.removeItem(SAVED_KEY);
+  window.localStorage.removeItem(ROUTE_KEY);
+  window.localStorage.removeItem(ADOPT_KEY);
+  window.dispatchEvent(new Event("jobrador-storage"));
 }
 
 export function useClientReady() {
@@ -102,17 +157,19 @@ function savedSnapshotFromStorage(): string[] {
   const raw = window.localStorage.getItem(SAVED_KEY);
   if (raw === savedRaw) return savedSnapshot;
   savedRaw = raw;
-  try {
-    const parsed = raw ? (JSON.parse(raw) as string[]) : [];
-    savedSnapshot = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    savedSnapshot = [];
-  }
+  savedSnapshot = readSavedJobs();
   return savedSnapshot;
 }
 
 export function useSavedJobs(): string[] {
   return useSyncExternalStore(subscribe, savedSnapshotFromStorage, () => savedSnapshot);
+}
+
+export function useSavedItems(): SavedItem[] {
+  const ids = useSavedJobs();
+  const items = readSavedItems();
+  if (items.length === ids.length && items.every((item, index) => item.id === ids[index])) return items;
+  return ids.map((id) => ({ id, kind: "job" as const }));
 }
 
 export function useJobSaved(id: string): boolean {

@@ -19,10 +19,10 @@ export function RecordActions({
       {canSave ? (
         <button
           type="button"
-          onClick={() => toggleSavedJob(stop.id)}
+          onClick={() => toggleSavedJob(stop.id, stop.kind)}
           className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white"
         >
-          {saved ? "Saved on this device" : "Save job"}
+          {saved ? "Saved" : stop.kind === "nearby_business" ? "Save place" : "Save"}
         </button>
       ) : null}
       <button

@@ -13,6 +13,7 @@ import { ReportForm } from "@/features/show/report/report-form";
 import { MapToast } from "@/components/map-toast";
 import { SampleBanner } from "@/components/sample-banner";
 import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
+import { toggleReferralPanel } from "@/lib/referral-panel";
 import type { Kind, OpportunityList } from "@/lib/api/types";
 import { markersFromOpportunities } from "@/lib/map-markers";
 import {
@@ -306,7 +307,7 @@ export function ExploreScreen() {
     <div className="flex h-dvh flex-col overflow-hidden bg-white px-3 py-2 sm:px-10 sm:py-3 md:px-16">
       <div className="mb-2 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:items-center">
         <div className="hidden shrink-0 sm:block">
-          <Logo compact />
+          <Logo compact href="/map" />
         </div>
         <div className="relative min-w-0 flex-1">
         <form
@@ -409,6 +410,9 @@ export function ExploreScreen() {
             className="hidden rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm sm:inline-flex"
           >
             Your posts
+          </button>
+          <button type="button" onClick={() => toggleReferralPanel()} className="shrink-0 rounded-full border border-line bg-white px-3 py-2 text-sm font-medium shadow-sm">
+            Referrals
           </button>
           <button
             type="button"

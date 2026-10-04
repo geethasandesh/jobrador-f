@@ -2,31 +2,29 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Logo } from "@/components/logo";
 import { hasSeenGuide } from "@/lib/guide";
-import { signIn, signUp } from "@/lib/session";
+import { appDestination } from "@/lib/routes";
+import { signIn, signUp, useAuthReady, useSession } from "@/lib/session";
 import { getSupabase, isAuthConfigured } from "@/lib/supabase";
-
-function afterLogin(next: string | null, showGuide: boolean) {
-  const path = !next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login") ? "/map" : next;
-  const [pathname, query = ""] = path.split("?");
-  const params = new URLSearchParams(query);
-  if (showGuide) params.set("guide", "1");
-  else params.delete("guide");
-  const search = params.toString();
-  return search ? `${pathname}?${search}` : pathname;
-}
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const authReady = useAuthReady();
+  const session = useSession();
   const [mode, setMode] = useState<"login" | "create">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const configured = isAuthConfigured();
+
+  useEffect(() => {
+    if (!authReady || !session) return;
+    router.replace(appDestination(searchParams.get("next"), !hasSeenGuide(session.id)));
+  }, [authReady, router, searchParams, session]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,7 +46,7 @@ export function LoginForm() {
       }
       const { data } = await getSupabase().auth.getSession();
       const userId = data.session?.user.id;
-      router.push(afterLogin(searchParams.get("next"), Boolean(userId && !hasSeenGuide(userId))));
+      router.push(appDestination(searchParams.get("next"), Boolean(userId && !hasSeenGuide(userId))));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Login failed.");
     } finally {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FactList } from "@/components/fact-list";
+import { ClosedReport } from "@/features/show/details/closed-report";
 import { ConfirmLead } from "@/features/show/details/confirm-lead";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { ApiError, getBusiness, getJob, getLead } from "@/lib/api/client";
@@ -155,7 +156,7 @@ function Preview({
       </div>
       <RecordActions
         compact
-        canSave={item.kind === "job"}
+        canSave={item.kind === "job" || item.kind === "nearby_business"}
         stop={{
           id: item.id,
           kind: item.kind,
@@ -291,6 +292,7 @@ function JobBody({ detail }: { detail: JobDetail }) {
         Apply on original website
       </a>
       <p className="mt-2 text-xs text-muted">This opens the job’s own page. jobrador does not send the application.</p>
+      <ClosedReport jobId={job.id} active={job.status === "ACTIVE"} />
       <RecordActions
         canSave
         stop={{
@@ -415,7 +417,7 @@ function BusinessBody({
         </a>
       ) : null}
       <RecordActions
-        canSave={false}
+        canSave
         stop={{
           id: business.id,
           kind: "nearby_business",

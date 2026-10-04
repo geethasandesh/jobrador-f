@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { useClientReady, useRoute } from "@/lib/local-lists";
+import { toggleReferralPanel } from "@/lib/referral-panel";
 import { signOut, useAuthReady, useSession } from "@/lib/session";
 
-export function SiteHeader() {
+export function SiteHeader({ kind = "public" }: { kind?: "public" | "app" }) {
   const pathname = usePathname();
   const router = useRouter();
   const ready = useClientReady();
@@ -16,11 +17,6 @@ export function SiteHeader() {
   const session = useSession();
   const signedIn = authReady && Boolean(session);
   if (pathname === "/map") return null;
-
-  function destination(path: string) {
-    if (signedIn) return path;
-    return `/login?next=${encodeURIComponent(path)}`;
-  }
 
   const onSky =
     pathname === "/" ||
@@ -33,23 +29,36 @@ export function SiteHeader() {
     <header className={`sticky top-0 z-[900] ${onSky ? "bg-transparent" : "bg-white"}`}>
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-2 px-3 sm:h-[72px] sm:gap-4 sm:px-5">
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <Logo />
+          <Logo href={kind === "app" ? "/map" : "/"} />
           <span className="text-xs font-semibold text-[#e10600] sm:text-sm">Beta</span>
         </div>
         <nav className="flex min-w-0 items-center gap-0.5 text-sm font-medium text-ink sm:gap-2">
-          <Link href={destination("/map?panel=share")} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
-            <PinIcon />
-            <span className="sr-only sm:not-sr-only">Share a tip</span>
-          </Link>
-          <Link href={destination("/map?panel=visits")} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
-            <RouteIcon />
-            <span className="sr-only sm:not-sr-only">Visit list</span>
-            {visitCount > 0 ? <span className="text-muted">{visitCount}</span> : null}
-          </Link>
-          <Link href={destination("/map")} className="shrink-0 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
-            <span className="sm:hidden">Map</span>
-            <span className="hidden sm:inline">Open map</span>
-          </Link>
+          {kind === "app" ? (
+            <>
+              <button type="button" onClick={() => toggleReferralPanel()} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+                <ChatIcon />
+                <span className="sr-only sm:not-sr-only">Referrals</span>
+              </button>
+              <Link href="/map?panel=share" className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+                <PinIcon />
+                <span className="sr-only sm:not-sr-only">Share a tip</span>
+              </Link>
+              <Link href="/map?panel=visits" className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+                <RouteIcon />
+                <span className="sr-only sm:not-sr-only">Visit list</span>
+                {visitCount > 0 ? <span className="text-muted">{visitCount}</span> : null}
+              </Link>
+              <Link href="/map" className="shrink-0 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+                <span className="sm:hidden">Map</span>
+                <span className="hidden sm:inline">Open map</span>
+              </Link>
+            </>
+          ) : null}
+          {kind === "public" && signedIn ? (
+            <Link href="/map" className="shrink-0 rounded-full px-2 py-2 hover:bg-zinc-50 sm:px-3">
+              Map
+            </Link>
+          ) : null}
           {signedIn ? (
             <button
               type="button"
@@ -68,6 +77,14 @@ export function SiteHeader() {
         </nav>
       </div>
     </header>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M3 3.5h10a1 1 0 0 1 1 1v5.2a1 1 0 0 1-1 1H7.2L4 13.2V10.7H3a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
   );
 }
 
