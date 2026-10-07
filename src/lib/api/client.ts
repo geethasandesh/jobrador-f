@@ -7,7 +7,22 @@ import type {
 } from "./types";
 import { accessToken } from "../access-token";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/+$/, "");
+const API_ORIGIN = "https://jobrador-b.vercel.app";
+
+function apiUrl() {
+  const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
+  if (!configured) return process.env.NODE_ENV === "development" ? "http://localhost:4000" : API_ORIGIN;
+  try {
+    const host = new URL(configured).hostname;
+    if (host === "localhost" || host === "127.0.0.1") return configured;
+    if (host === "jobrador.online" || host === "www.jobrador.online" || host.startsWith("jobrador-f")) return API_ORIGIN;
+  } catch {
+    return API_ORIGIN;
+  }
+  return configured;
+}
+
+const API_URL = apiUrl();
 
 export class ApiError extends Error {
   status: number;
