@@ -111,6 +111,9 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
   useEffect(() => {
     let disposed = false;
     const container = containerRef.current;
+    const onResize = () => mapRef.current?.invalidateSize();
+    window.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
 
     (async () => {
       const leaflet = await import("leaflet");
@@ -118,14 +121,14 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
       maplibre.setWorkerUrl("/maplibre-gl-worker.mjs");
       const { default: maplibreGL } = await import("@maplibre/maplibre-gl-leaflet");
       if (disposed || !container || mapRef.current) return;
-      const map = leaflet.map(container, { zoomControl: false });
+      const map = leaflet.map(container, {
+        zoomControl: false,
+        attributionControl: false,
+      });
       leaflet.control.zoom({ position: "bottomright" }).addTo(map);
       maplibreGL({
         style: "https://tiles.openfreemap.org/styles/positron",
       }).addTo(map);
-      map.attributionControl.addAttribution(
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://openfreemap.org">OpenFreeMap</a>',
-      );
       map.setView([center.latitude, center.longitude], zoomForRadius(radiusKm));
       window.setTimeout(() => map.invalidateSize(), 0);
       const layer = leaflet.layerGroup().addTo(map);
@@ -151,6 +154,8 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
 
     return () => {
       disposed = true;
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
       mapRef.current?.remove();
       mapRef.current = null;
       layerRef.current = null;

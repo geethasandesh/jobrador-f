@@ -10,6 +10,10 @@ import { accessToken } from "../access-token";
 const API_ORIGIN = "https://jobrador-b.vercel.app";
 
 function apiUrl() {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") return "";
+  }
   const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
   if (!configured) return process.env.NODE_ENV === "development" ? "http://localhost:4000" : API_ORIGIN;
   try {
@@ -21,8 +25,6 @@ function apiUrl() {
   }
   return configured;
 }
-
-const API_URL = apiUrl();
 
 export class ApiError extends Error {
   status: number;
@@ -45,7 +47,7 @@ async function failMessage(response: Response): Promise<string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    response = await fetch(`${apiUrl()}${path}`, {
       ...init,
       cache: "no-store",
       headers: {

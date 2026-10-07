@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const apiOrigin = (process.env.JOBRADOR_API_ORIGIN ?? "https://jobrador-b.vercel.app").replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["127.0.0.1"],
+  allowedDevOrigins: ["127.0.0.1", "*.trycloudflare.com"],
   async redirects() {
     return [{ source: "/referrals", destination: "/map?referrals=1", permanent: false }];
   },
