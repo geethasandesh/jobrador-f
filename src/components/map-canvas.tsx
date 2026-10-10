@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Supercluster from "supercluster";
 import type { Kind } from "@/lib/api/types";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -39,60 +40,232 @@ function zoomForRadius(radiusKm: number) {
   return 12;
 }
 
-function pinHtml(kind: Kind, label: string, selected: boolean, tone?: "unknown") {
-  const pinTone = tone === "unknown" ? "unknown" : kind === "community_lead" ? "lead" : kind === "nearby_business" ? "place" : "job";
-  return `<span class="dot-pin${selected ? " is-selected" : ""}"><span class="pin pin-${pinTone}${selected ? " pin-selected" : ""}">${icons[kind]}</span><strong>${label}</strong></span>`;
+type Tone = "job" | "lead" | "place" | "unknown";
+type ToneCounts = Record<Tone, number>;
+
+const TONES: Tone[] = ["job", "lead", "place", "unknown"];
+const TONE_COLORS: Record<Tone, string> = {
+  job: "#22c55e",
+  lead: "#3b82f6",
+  place: "#f59e0b",
+  unknown: "#9ca3af",
+};
+// Above this zoom every pin is drawn on its own.
+const CLUSTER_MAX_ZOOM = 16;
+
+function toneOf(item: MapMarker): Tone {
+  if (item.tone === "unknown") return "unknown";
+  if (item.kind === "community_lead") return "lead";
+  if (item.kind === "nearby_business") return "place";
+  return "job";
 }
 
-function paintMarkers(
-  leaflet: typeof import("leaflet"),
-  layer: import("leaflet").LayerGroup,
-  items: MapMarker[],
-  selectedId: string | null,
-  radiusKm: number,
-  center: { latitude: number; longitude: number },
-  onSelect: (id: string) => void,
-) {
-  layer.clearLayers();
-  leaflet
-    .circle([center.latitude, center.longitude], {
-      radius: radiusKm * 1000,
-      color: "#d0d0d0",
-      weight: 1,
-      fillOpacity: 0,
-    })
-    .addTo(layer);
+function pinHtml(item: MapMarker, selected: boolean) {
+  return `<span class="dot-pin${selected ? " is-selected" : ""}"><span class="pin pin-${toneOf(item)}${selected ? " pin-selected" : ""}">${icons[item.kind]}</span><strong>${item.label}</strong></span>`;
+}
 
-  for (const item of items) {
-    const selected = item.id === selectedId;
-    const marker = leaflet.marker([item.latitude, item.longitude], {
+function clusterSize(total: number) {
+  if (total < 10) return 38;
+  if (total < 50) return 44;
+  if (total < 200) return 50;
+  return 56;
+}
+
+function clusterHtml(counts: ToneCounts, total: number) {
+  const size = clusterSize(total);
+  const stops: string[] = [];
+  let at = 0;
+  for (const tone of TONES) {
+    if (!counts[tone]) continue;
+    const from = (at / total) * 360;
+    at += counts[tone];
+    stops.push(`${TONE_COLORS[tone]} ${from}deg ${(at / total) * 360}deg`);
+  }
+  const label = total >= 1000 ? `${(total / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(total);
+  return `<span class="cluster-pin" style="width:${size}px;height:${size}px;background:conic-gradient(${stops.join(",")})"><span>${label}</span></span>`;
+}
+
+type PinIndex = Supercluster<{ id: string; tone: Tone }, ToneCounts>;
+
+function buildIndex(items: MapMarker[], selectedId: string | null): PinIndex {
+  const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+  const index: PinIndex = new Supercluster({
+    radius: touch ? 72 : 60,
+    extent: 256,
+    maxZoom: CLUSTER_MAX_ZOOM,
+    minPoints: 2,
+    map: (props) => ({ job: 0, lead: 0, place: 0, unknown: 0, [props.tone]: 1 }),
+    reduce: (into, props) => {
+      for (const tone of TONES) into[tone] += props[tone];
+    },
+  });
+  index.load(
+    items
+      .filter((item) => item.id !== selectedId)
+      .map((item) => ({
+        type: "Feature" as const,
+        properties: { id: item.id, tone: toneOf(item) },
+        geometry: { type: "Point" as const, coordinates: [item.longitude, item.latitude] },
+      })),
+  );
+  return index;
+}
+
+// Pins that share an address are fanned out in a small ring so each one stays tappable.
+function fanOffsets(points: Array<{ key: string; latitude: number; longitude: number }>) {
+  const groups = new Map<string, string[]>();
+  for (const point of points) {
+    const spot = `${point.latitude.toFixed(5)},${point.longitude.toFixed(5)}`;
+    groups.set(spot, [...(groups.get(spot) ?? []), point.key]);
+  }
+  const offsets = new Map<string, [number, number]>();
+  for (const keys of groups.values()) {
+    if (keys.length < 2) continue;
+    keys.forEach((key, index) => {
+      if (keys.length <= 8) {
+        const angle = (index / keys.length) * Math.PI * 2 - Math.PI / 2;
+        const ring = 24 + keys.length * 2;
+        offsets.set(key, [Math.round(Math.cos(angle) * ring), Math.round(Math.sin(angle) * ring)]);
+        return;
+      }
+      // Big stacks use a sunflower spiral so even 50 pins at one address stay compact.
+      const angle = index * 2.39996;
+      const ring = 20 * Math.sqrt(index + 0.5);
+      offsets.set(key, [Math.round(Math.cos(angle) * ring), Math.round(Math.sin(angle) * ring)]);
+    });
+  }
+  return offsets;
+}
+
+type Painted = { marker: import("leaflet").Marker; html: string };
+
+type PinState = {
+  leaflet: typeof import("leaflet");
+  map: import("leaflet").Map;
+  layer: import("leaflet").LayerGroup;
+  painted: Map<string, Painted>;
+  index: PinIndex;
+  byId: Map<string, MapMarker>;
+  selected: MapMarker | null;
+  onSelect: (id: string) => void;
+};
+
+function paintPins(state: PinState) {
+  const { leaflet, map, layer, painted, index, byId, selected } = state;
+  const zoom = Math.max(0, Math.min(22, Math.round(map.getZoom())));
+  const bounds = map.getBounds().pad(0.3);
+  const found = index.getClusters([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()], zoom);
+
+  type Wanted = {
+    key: string;
+    latitude: number;
+    longitude: number;
+    html: string;
+    size: [number, number];
+    anchor: [number, number];
+    title: string;
+    zIndex: number;
+    onTap: () => void;
+  };
+  const wanted: Wanted[] = [];
+
+  const pinFor = (item: MapMarker, isSelected: boolean): Wanted => ({
+    key: `p:${item.id}`,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    html: pinHtml(item, isSelected),
+    size: [64, 46],
+    anchor: [32, 16],
+    title: item.label,
+    zIndex: isSelected ? 900 : 0,
+    onTap: () => {
+      state.onSelect(item.id);
+      document.getElementById(`card-${item.id}`)?.scrollIntoView({ block: "nearest" });
+    },
+  });
+
+  for (const feature of found) {
+    const [longitude, latitude] = feature.geometry.coordinates as [number, number];
+    const props = feature.properties as Partial<Supercluster.ClusterProperties> & Partial<ToneCounts> & { id?: string };
+    if (props.cluster && props.cluster_id != null) {
+      const total = props.point_count ?? 0;
+      const size = clusterSize(total);
+      const clusterId = props.cluster_id;
+      wanted.push({
+        key: `c:${clusterId}`,
+        latitude,
+        longitude,
+        html: clusterHtml(props as ToneCounts, total),
+        size: [size, size],
+        anchor: [size / 2, size / 2],
+        title: `${total} places here. Tap to zoom in.`,
+        zIndex: 400 + Math.min(total, 400),
+        onTap: () => {
+          const next = Math.min(index.getClusterExpansionZoom(clusterId), CLUSTER_MAX_ZOOM + 1);
+          map.flyTo([latitude, longitude], Math.max(next, map.getZoom() + 1), { duration: 0.35 });
+        },
+      });
+      continue;
+    }
+    const item = props.id ? byId.get(props.id) : undefined;
+    if (item) wanted.push(pinFor(item, false));
+  }
+  if (selected) wanted.push(pinFor(selected, true));
+
+  if (zoom > CLUSTER_MAX_ZOOM) {
+    const offsets = fanOffsets(wanted.filter((entry) => entry.key.startsWith("p:")));
+    for (const entry of wanted) {
+      const offset = offsets.get(entry.key);
+      if (!offset) continue;
+      entry.anchor = [entry.anchor[0] - offset[0], entry.anchor[1] - offset[1]];
+      entry.html = entry.html.replace('class="dot-pin', 'class="dot-pin is-fanned');
+    }
+  }
+
+  const keep = new Set<string>();
+  for (const entry of wanted) {
+    const html = `${entry.html}|${entry.anchor.join(",")}`;
+    keep.add(entry.key);
+    const existing = painted.get(entry.key);
+    const icon = () =>
+      leaflet.divIcon({ className: "pin-wrap", html: entry.html, iconSize: entry.size, iconAnchor: entry.anchor });
+    if (existing) {
+      if (existing.html !== html) {
+        existing.marker.setIcon(icon());
+        existing.marker.setZIndexOffset(entry.zIndex);
+        existing.html = html;
+      }
+      existing.marker.off("click").on("click", (event) => {
+        leaflet.DomEvent.stopPropagation(event);
+        entry.onTap();
+      });
+      continue;
+    }
+    const marker = leaflet.marker([entry.latitude, entry.longitude], {
       keyboard: true,
-      title: item.label,
-      zIndexOffset: selected ? 800 : 0,
-      icon: leaflet.divIcon({
-        className: "pin-wrap",
-        html: pinHtml(item.kind, item.label, selected, item.tone),
-        iconSize: [64, 46],
-        iconAnchor: [32, 16],
-      }),
+      title: entry.title,
+      zIndexOffset: entry.zIndex,
+      icon: icon(),
     });
     marker.on("click", (event) => {
       leaflet.DomEvent.stopPropagation(event);
-      onSelect(item.id);
-      document.getElementById(`card-${item.id}`)?.scrollIntoView({ block: "nearest" });
+      entry.onTap();
     });
     marker.addTo(layer);
+    painted.set(entry.key, { marker, html });
+  }
+  for (const [key, entry] of painted) {
+    if (keep.has(key)) continue;
+    layer.removeLayer(entry.marker);
+    painted.delete(key);
   }
 }
 
 export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onPick }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
-  const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
-  const markersRef = useRef(markers);
-  const selectedRef = useRef(selectedId);
-  const radiusRef = useRef(radiusKm);
-  const centerRef = useRef(center);
+  const pinsRef = useRef<PinState | null>(null);
+  const circleRef = useRef<import("leaflet").Circle | null>(null);
   const onSelectRef = useRef(onSelect);
   const onPickRef = useRef(onPick);
   const [ready, setReady] = useState(false);
@@ -100,16 +273,13 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
   useEffect(() => {}, []);
 
   useEffect(() => {
-    markersRef.current = markers;
-    selectedRef.current = selectedId;
-    radiusRef.current = radiusKm;
-    centerRef.current = center;
     onSelectRef.current = onSelect;
     onPickRef.current = onPick;
-  }, [markers, selectedId, radiusKm, center, onSelect, onPick]);
+  }, [onSelect, onPick]);
 
   useEffect(() => {
     let disposed = false;
+    let frame = 0;
     const container = containerRef.current;
     const onResize = () => mapRef.current?.invalidateSize();
     window.addEventListener("resize", onResize);
@@ -124,6 +294,8 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
       const map = leaflet.map(container, {
         zoomControl: false,
         attributionControl: false,
+        bounceAtZoomLimits: false,
+        maxZoom: 19,
       });
       leaflet.control.zoom({ position: "bottomright" }).addTo(map);
       maplibreGL({
@@ -135,30 +307,35 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
       map.on("click", (event) => {
         onPickRef.current?.(event.latlng.lat, event.latlng.lng);
       });
-      map.on("zoomend moveend", () => {
-        if (!mapRef.current || !layerRef.current) return;
-        paintMarkers(
-          leaflet,
-          layerRef.current,
-          markersRef.current,
-          selectedRef.current,
-          radiusRef.current,
-          centerRef.current,
-          (id) => onSelectRef.current(id),
-        );
+      map.on("moveend", () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() => {
+          if (pinsRef.current) paintPins(pinsRef.current);
+        });
       });
-      layerRef.current = layer;
+      pinsRef.current = {
+        leaflet,
+        map,
+        layer,
+        painted: new Map(),
+        index: buildIndex([], null),
+        byId: new Map(),
+        selected: null,
+        onSelect: (id) => onSelectRef.current(id),
+      };
       mapRef.current = map;
       setReady(true);
     })();
 
     return () => {
       disposed = true;
+      cancelAnimationFrame(frame);
       window.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
       mapRef.current?.remove();
       mapRef.current = null;
-      layerRef.current = null;
+      pinsRef.current = null;
+      circleRef.current = null;
       setReady(false);
     };
     // The map instance is created once. Later effects move it.
@@ -173,20 +350,28 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
   }, [ready, center.latitude, center.longitude, radiusKm]);
 
   useEffect(() => {
-    if (!ready || !mapRef.current || !layerRef.current) return;
-    let cancelled = false;
-    const layer = layerRef.current;
+    const pins = pinsRef.current;
+    if (!ready || !pins) return;
+    circleRef.current?.remove();
+    circleRef.current = pins.leaflet
+      .circle([center.latitude, center.longitude], {
+        radius: radiusKm * 1000,
+        color: "#d0d0d0",
+        weight: 1,
+        fillOpacity: 0,
+        interactive: false,
+      })
+      .addTo(pins.map);
+  }, [ready, center.latitude, center.longitude, radiusKm]);
 
-    (async () => {
-      const leaflet = await import("leaflet");
-      if (cancelled) return;
-      paintMarkers(leaflet, layer, markers, selectedId, radiusKm, centerRef.current, (id) => onSelectRef.current(id));
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, markers, selectedId, center.latitude, center.longitude, radiusKm]);
+  useEffect(() => {
+    const pins = pinsRef.current;
+    if (!ready || !pins) return;
+    pins.byId = new Map(markers.map((item) => [item.id, item]));
+    pins.selected = selectedId ? (pins.byId.get(selectedId) ?? null) : null;
+    pins.index = buildIndex(markers, pins.selected?.id ?? null);
+    paintPins(pins);
+  }, [ready, markers, selectedId]);
 
   return <div ref={containerRef} className="map-root h-full w-full" role="application" aria-label="Map of student jobs" />;
 }

@@ -52,6 +52,15 @@ textarea {
   outline-color: #111;
 }
 
+/* iOS Safari zooms the page into any field under 16px and does not zoom back out. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 .map-root,
 .map-root .leaflet-container {
   height: 100%;
@@ -100,6 +109,37 @@ textarea {
   border: 2px solid white;
   color: #fff;
   box-shadow: 0 4px 10px rgba(17, 17, 17, 0.28);
+}
+
+.dot-pin.is-fanned:not(.is-selected) strong {
+  display: none;
+}
+
+.cluster-pin {
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.18);
+  cursor: pointer;
+  transition: transform 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cluster-pin > span {
+  display: grid;
+  place-items: center;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  border-radius: 9999px;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-pin:active {
+  transform: scale(0.92);
 }
 
 .pin-job {

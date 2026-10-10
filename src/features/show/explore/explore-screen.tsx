@@ -54,7 +54,9 @@ export function ExploreScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [draftQuery, setDraftQuery] = useState("");
-  const [placeHits, setPlaceHits] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [recentPlaces, setRecentPlaces] = useState<SearchPlace[]>([]);  const [placeHits, setPlaceHits] = useState<SearchPlace[]>([]);
   const [searching, setSearching] = useState(true);
   const [data, setData] = useState<OpportunityList | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,9 +136,11 @@ export function ExploreScreen() {
     };
   }, [draftQuery, label]);
 
-  function choosePlace(place: { label: string; latitude: number; longitude: number }) {
+  function choosePlace(place: SearchPlace) {
     setDraftQuery(place.label);
     setPlaceHits([]);
+    setSearchFocused(false);
+    setRecentPlaces(rememberPlace(place));
     setNotice(null);
     setToast(null);
     update({
@@ -253,13 +257,17 @@ export function ExploreScreen() {
     update({ kinds: next.length === KINDS.length ? null : next.join(",") });
   }
 
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setNotice("This browser cannot share a location.");
+  function goToMyLocation() {
+    setSearchFocused(false);
+    if (!navigator.geolocation || !window.isSecureContext) {
+      setToast("This page cannot read your location. Type a Berlin area instead.");
       return;
     }
+    setLocating(true);
+    setToast("Finding your location…");
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        setLocating(false);
         const nextLatitude = position.coords.latitude;
         const nextLongitude = position.coords.longitude;
         const inside =
@@ -270,6 +278,8 @@ export function ExploreScreen() {
         }
         setNotice(null);
         setToast(null);
+        setDraftQuery("");
+        setPlaceHits([]);
         update({
           lat: String(nextLatitude),
           lng: String(nextLongitude),
@@ -277,7 +287,11 @@ export function ExploreScreen() {
           q: null,
         });
       },
-      () => setNotice("Location was blocked. Pick a Berlin area instead."),
+      () => {
+        setLocating(false);
+        setToast("Location was blocked. Allow it in the browser, or type a Berlin area.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
     );
   }
 
@@ -342,6 +356,12 @@ export function ExploreScreen() {
               setDraftQuery(event.target.value);
               setToast(null);
             }}
+            onFocus={(event) => {
+              setSearchFocused(true);
+              setRecentPlaces(readRecentPlaces());
+              event.target.select();
+            }}
+            onBlur={() => setSearchFocused(false)}
             placeholder="Postal code or area in Berlin"
             className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
           />
@@ -358,19 +378,54 @@ export function ExploreScreen() {
               ×
             </button>
           ) : null}
+          <button
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={goToMyLocation}
+            disabled={locating}
+            aria-label="Use my location"
+            title="Use my location"
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${locating ? "animate-pulse bg-zinc-100 text-ink" : "text-ink hover:bg-zinc-100"}`}
+          >
+            <LocateIcon />
+          </button>
         </form>
-        {placeHits.length > 0 ? (
-          <ul className="absolute top-[calc(100%+6px)] right-0 left-0 z-[800] overflow-hidden rounded-2xl border border-line bg-white py-1 shadow-lg">
+        {searchFocused || placeHits.length > 0 ? (
+          <ul className="absolute top-[calc(100%+6px)] right-0 left-0 z-[800] max-h-[60dvh] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-white py-1 shadow-lg">
+            <li>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  (document.activeElement as HTMLElement | null)?.blur();
+                  goToMyLocation();
+                }}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold text-[#3b82f6] hover:bg-zinc-50"
+              >
+                <LocateIcon />
+                Your location
+              </button>
+            </li>
+            {!draftQuery.trim() && recentPlaces.length > 0 ? (
+              <>
+                <li className="flex items-center justify-between px-4 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
+                  Recent
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => setRecentPlaces(clearRecentPlaces())}
+                    className="normal-case tracking-normal hover:text-ink"
+                  >
+                    Clear
+                  </button>
+                </li>
+                {recentPlaces.map((place) => (
+                  <PlaceRow key={`recent-${place.label}`} place={place} icon={<ClockIcon />} onChoose={choosePlace} />
+                ))}
+              </>
+            ) : null}
             {placeHits.map((place) => (
-              <li key={`${place.label}-${place.latitude}`}>
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-zinc-50"
-                  onClick={() => choosePlace(place)}
-                >
-                  {place.label}
-                </button>
-              </li>
+              <PlaceRow key={`${place.label}-${place.latitude}`} place={place} icon={<PinIcon />} onChoose={choosePlace} />
             ))}
           </ul>
         ) : null}
@@ -750,7 +805,7 @@ export function ExploreScreen() {
                   <option value="newest">Newest</option>
                 </select>
               </div>
-              <button type="button" onClick={useMyLocation} className="text-sm font-semibold">
+              <button type="button" onClick={goToMyLocation} className="text-sm font-semibold">
                 Use my location
               </button>
               {notice ? <p className="text-sm text-place">{notice}</p> : null}
@@ -907,6 +962,90 @@ function FlagIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M4 2.6v11M4 3.2h7.4L9.4 6.1l2 2.9H4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+type SearchPlace = { label: string; latitude: number; longitude: number };
+
+const RECENT_PLACES_KEY = "jobrador:recent-places";
+
+function readRecentPlaces(): SearchPlace[] {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(RECENT_PLACES_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (place): place is SearchPlace =>
+          typeof place?.label === "string" && Number.isFinite(place?.latitude) && Number.isFinite(place?.longitude),
+      )
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+function rememberPlace(place: SearchPlace) {
+  const next = [place, ...readRecentPlaces().filter((saved) => saved.label !== place.label)].slice(0, 5);
+  try {
+    window.localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(next));
+  } catch {}
+  return next;
+}
+
+function clearRecentPlaces() {
+  try {
+    window.localStorage.removeItem(RECENT_PLACES_KEY);
+  } catch {}
+  return [];
+}
+
+function PlaceRow({
+  place,
+  icon,
+  onChoose,
+}: {
+  place: SearchPlace;
+  icon: React.ReactNode;
+  onChoose: (place: SearchPlace) => void;
+}) {
+  const [name, ...rest] = place.label.split(", ");
+  return (
+    <li>
+      <button
+        type="button"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          (document.activeElement as HTMLElement | null)?.blur();
+          onChoose(place);
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-zinc-50"
+      >
+        <span className="shrink-0 text-muted">{icon}</span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm text-ink">{name}</span>
+          {rest.length > 0 ? <span className="block truncate text-xs text-muted">{rest.join(", ")}</span> : null}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+function LocateIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
+      <circle cx="12" cy="12" r="6.5" />
+      <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+      <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
     </svg>
   );
 }

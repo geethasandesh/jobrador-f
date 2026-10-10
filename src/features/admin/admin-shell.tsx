@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Logo } from "@/components/logo";
+import { PasswordInput } from "@/components/password-input";
 import { ApiError, getAdminOverview, reviewReferral, type AdminOverview } from "@/lib/api/client";
 import { signIn, signOut, useAuthReady, useSession } from "@/lib/session";
 import { getSupabase, isAuthConfigured } from "@/lib/supabase";
@@ -27,19 +28,26 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const authReady = useAuthReady();
   const session = useSession();
   const pathname = usePathname();
+  const router = useRouter();
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
 
   async function load() {
     setError(null);
     setLoading(true);
     try {
       setOverview(await getAdminOverview());
+      setDenied(false);
     } catch (caught) {
       setOverview(null);
-      setError(caught instanceof ApiError ? caught.message : "The dashboard did not load.");
+      if (caught instanceof ApiError && (caught.status === 401 || caught.status === 403)) {
+        setDenied(true);
+      } else {
+        setError(caught instanceof ApiError ? caught.message : "The dashboard did not load.");
+      }
     } finally {
       setLoading(false);
     }
@@ -47,6 +55,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!authReady || !session) return;
+    setDenied(false);
     void load();
   }, [authReady, session]);
 
@@ -66,6 +75,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   async function logout() {
     await signOut();
     setOverview(null);
+    setDenied(false);
+    router.replace("/admin");
   }
 
   if (!authReady) {
@@ -73,6 +84,25 @@ export function AdminShell({ children }: { children: ReactNode }) {
   }
 
   if (!session) return <AdminLogin />;
+
+  if (denied) return <AdminDenied onSwitch={() => void logout()} />;
+
+  if (!overview) {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-white px-5 text-center">
+        {error ? (
+          <div>
+            <p className="text-sm text-[#e11d48]">{error}</p>
+            <button type="button" onClick={() => void load()} className="mt-4 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white">
+              Try again
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted">{loading ? "Checking access…" : "Loading…"}</p>
+        )}
+      </main>
+    );
+  }
 
   const accounts = overview?.counts.users ?? 0;
   const pending = overview?.counts.referralsPending ?? 0;
@@ -109,12 +139,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </aside>
       <div className="min-w-0 flex-1">
         {error ? <p className="px-4 pt-6 text-sm text-[#e11d48] md:px-10">{error}</p> : null}
-        {loading && !overview ? <p className="px-4 py-16 text-sm text-muted md:px-10">Loading the dashboard…</p> : null}
-        {overview ? (
-          <AdminDataContext.Provider value={{ overview, reviewing, review, reload: load }}>
-            <div className="mx-auto w-full max-w-4xl px-4 py-8 md:px-10">{children}</div>
-          </AdminDataContext.Provider>
-        ) : null}
+        <AdminDataContext.Provider value={{ overview, reviewing, review, reload: load }}>
+          <div className="mx-auto w-full max-w-4xl px-4 py-8 md:px-10">{children}</div>
+        </AdminDataContext.Provider>
       </div>
     </div>
   );
@@ -131,6 +158,29 @@ function SideLink({ href, label, active, count = 0 }: { href: string; label: str
         <span className={`rounded-full px-2 py-0.5 text-[11px] ${active ? "bg-white text-ink" : "bg-[#f3f3f3] text-ink"}`}>{count}</span>
       ) : null}
     </Link>
+  );
+}
+
+function AdminDenied({ onSwitch }: { onSwitch: () => void }) {
+  return (
+    <main className="min-h-dvh bg-white">
+      <header className="border-b border-line">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-2 px-4 sm:h-[72px]">
+          <Logo href="/map" />
+          <span className="text-sm font-semibold text-[#e10600]">Beta</span>
+        </div>
+      </header>
+      <div className="mx-auto flex min-h-[70dvh] w-full max-w-md flex-col justify-center px-5">
+        <h1 className="text-4xl font-black tracking-tight">Not available</h1>
+        <p className="mt-2 text-sm text-muted">This page is not available for your account.</p>
+        <Link href="/map" className="mt-8 w-full rounded-full bg-ink py-3 text-center text-sm font-semibold text-white">
+          Back to the map
+        </Link>
+        <button type="button" onClick={onSwitch} className="mt-3 w-full rounded-full border border-line py-3 text-sm font-semibold">
+          Log in with another account
+        </button>
+      </div>
+    </main>
   );
 }
 
@@ -180,7 +230,7 @@ function AdminLogin() {
         </label>
         <label className="mt-3 block text-sm font-medium" htmlFor="admin-password">
           Password
-          <input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="field mt-1" required />
+          <PasswordInput id="admin-password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1" required />
         </label>
         {error ? <p className="mt-3 text-sm text-[#e11d48]">{error}</p> : null}
         <button type="submit" disabled={pending} className="mt-4 w-full rounded-full bg-ink py-3 text-sm font-semibold text-white disabled:opacity-60">

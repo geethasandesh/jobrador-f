@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Logo } from "@/components/logo";
+import { PasswordInput } from "@/components/password-input";
 import { updatePassword } from "@/lib/session";
 import { getSupabase, isAuthConfigured } from "@/lib/supabase";
 
@@ -53,13 +54,12 @@ export function UpdatePasswordForm() {
         <form onSubmit={submit} className="mt-8 space-y-3">
           <label className="block text-sm font-medium" htmlFor="password">
             Password
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="field mt-1"
+              className="mt-1"
               required
             />
           </label>

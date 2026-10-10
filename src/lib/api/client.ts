@@ -10,10 +10,6 @@ import { accessToken } from "../access-token";
 const API_ORIGIN = "https://jobrador-b.vercel.app";
 
 function apiUrl() {
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host !== "localhost" && host !== "127.0.0.1") return "";
-  }
   const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
   if (!configured) return process.env.NODE_ENV === "development" ? "http://localhost:4000" : API_ORIGIN;
   try {
@@ -24,6 +20,15 @@ function apiUrl() {
     return API_ORIGIN;
   }
   return configured;
+}
+
+const API_URL = apiUrl();
+
+// In development the browser goes through the Next /v1 rewrite, so the API
+// target is set in one place (JOBRADOR_API_ORIGIN) for every device.
+function requestBase() {
+  if (typeof window === "undefined" || process.env.NODE_ENV !== "development") return API_URL;
+  return window.location.origin;
 }
 
 export class ApiError extends Error {
@@ -47,7 +52,7 @@ async function failMessage(response: Response): Promise<string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${apiUrl()}${path}`, {
+    response = await fetch(`${requestBase()}${path}`, {
       ...init,
       cache: "no-store",
       headers: {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type CloudShaderProps = {
@@ -249,14 +249,17 @@ export const CloudShader = ({
     skyBottomColor,
   };
 
+  const [generation, setGeneration] = useState(0);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const gl = canvas.getContext("webgl", {
-      alpha: false,
+      alpha: true,
       antialias: false,
       premultipliedAlpha: false,
+      powerPreference: "low-power",
     });
     if (!gl) return;
 
@@ -298,27 +301,47 @@ export const CloudShader = ({
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
+    // Touch devices get a lower resolution: the clouds are soft, and full
+    // Retina makes iOS drop the WebGL context while scrolling.
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    const maxDpr = touch ? 1 : 2;
+    const start = performance.now();
+
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      const w = Math.max(1, Math.floor(width * dpr));
-      const h = Math.max(1, Math.floor(height * dpr));
-      if (canvas.width !== w || canvas.height !== h) {
+      const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+      const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+      const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+      const changed = canvas.width !== w || canvas.height !== h;
+      if (changed) {
         canvas.width = w;
         canvas.height = h;
       }
       gl.viewport(0, 0, w, h);
       gl.uniform2f(loc.res, w, h);
+      // Resizing clears the canvas, so paint right away instead of
+      // showing an empty frame until the next animation tick.
+      if (changed && running) render(performance.now());
     };
 
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
-    resize();
 
-    const start = performance.now();
-    const draw = (now: number) => {
-      if (!running) return;
+    const onLost = (event: Event) => {
+      event.preventDefault();
+      running = false;
+      cancelAnimationFrame(frame);
+    };
+    const onRestored = () => setGeneration((value) => value + 1);
+    canvas.addEventListener("webglcontextlost", onLost);
+    canvas.addEventListener("webglcontextrestored", onRestored);
+
+    const onVisibility = () => {
+      cancelAnimationFrame(frame);
+      if (!document.hidden && running) frame = requestAnimationFrame(draw);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    const render = (now: number) => {
       const p = paramsRef.current;
       const elapsed = reduceMotion ? 0 : ((now - start) / 1000) * p.speed;
       const cloud = parseHex(p.cloudColor);
@@ -331,21 +354,30 @@ export const CloudShader = ({
       gl.uniform3f(loc.skyTop, skyTop[0], skyTop[1], skyTop[2]);
       gl.uniform3f(loc.skyBottom, skyBottom[0], skyBottom[1], skyBottom[2]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+
+    const draw = (now: number) => {
+      if (!running) return;
+      render(now);
       frame = requestAnimationFrame(draw);
     };
 
+    resize();
     frame = requestAnimationFrame(draw);
 
     return () => {
       running = false;
       cancelAnimationFrame(frame);
       observer.disconnect();
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
+      document.removeEventListener("visibilitychange", onVisibility);
       gl.deleteBuffer(buffer);
       gl.deleteProgram(program);
       gl.deleteShader(vert);
       gl.deleteShader(frag);
     };
-  }, []);
+  }, [generation]);
 
   return (
     <div
@@ -353,8 +385,10 @@ export const CloudShader = ({
         "relative h-full min-h-80 w-full overflow-hidden",
         className,
       )}
+      style={{ backgroundImage: `linear-gradient(to bottom, ${skyTopColor}, ${skyBottomColor})` }}
     >
       <canvas
+        key={generation}
         ref={canvasRef}
         className="pointer-events-none absolute inset-0 h-full w-full"
       />
