@@ -6,7 +6,7 @@ import { SampleBanner } from "@/components/sample-banner";
 import { RecordActions } from "@/features/show/details/record-actions";
 import { getBusiness } from "@/lib/api/client";
 import { formatDistance } from "@/lib/format";
-import { categoryLabel, jobTypeLabel } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, PLACE_CHECKED_EMPTY, PLACE_CHECKING } from "@/lib/labels";
 import { backToMap, readOrigin } from "@/lib/origin";
 
 export default async function BusinessPage({
@@ -43,8 +43,8 @@ export default async function BusinessPage({
         {business.distanceKm != null ? ` · ${formatDistance(business.distanceKm)} away` : ""}
       </p>
       {activeJobs.length === 0 && leads.length === 0 ? (
-        <p className="mt-4 rounded-2xl bg-place-soft px-4 py-3 text-sm text-place">
-          No public vacancy found. You can visit and ask if they are currently hiring.
+        <p className={`mt-4 rounded-2xl px-4 py-3 text-sm ${business.hiringCheckedAt ? "bg-place-soft text-place" : "bg-zinc-100 text-muted"}`}>
+          {business.hiringCheckedAt ? PLACE_CHECKED_EMPTY : PLACE_CHECKING}
         </p>
       ) : null}
       <FactList

@@ -10,7 +10,7 @@ import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
 import type { Kind, Opportunity } from "@/lib/api/types";
 import { formatDistance, mapHref } from "@/lib/format";
 import { markersFromOpportunities } from "@/lib/map-markers";
-import { categoryLabel, jobTypeLabel, KIND_LABEL } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, KIND_LABEL, PLACE_CHECKED_EMPTY, PLACE_CHECKING } from "@/lib/labels";
 import { useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
 import { BERLIN_ONLY_MESSAGE, DEFAULT_PLACE } from "@/lib/places";
 import { useAuthReady, useSession } from "@/lib/session";
@@ -18,7 +18,7 @@ import { useAuthReady, useSession } from "@/lib/session";
 const statusBar: Record<Kind, { label: string; className: string }> = {
   job: { label: "JOB LISTING", className: "bg-[#22c55e]" },
   community_lead: { label: "STUDENT REPORT", className: "bg-[#3b82f6]" },
-  nearby_business: { label: "NO PUBLIC VACANCY", className: "bg-[#f59e0b]" },
+  nearby_business: { label: "ASK IN PERSON", className: "bg-[#f59e0b]" },
 };
 
 export function LandingMap() {
@@ -234,7 +234,9 @@ function PreviewCard({ item, onOpen, onClose }: { item: Opportunity; onOpen: () 
           {item.kind === "nearby_business"
             ? item.hiring
               ? `Hiring · ${item.linkedJobTitle ?? "Open role"}`
-              : "No public vacancy found"
+              : item.status === "UNCHECKED"
+                ? PLACE_CHECKING
+                : PLACE_CHECKED_EMPTY
             : item.title}
         </p>
         <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">

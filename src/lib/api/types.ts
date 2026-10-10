@@ -79,6 +79,7 @@ export type Business = {
   openingHours?: string;
   source: string;
   sourceId?: string;
+  hiringCheckedAt?: string | null;
   distanceKm?: number | null;
 };
 

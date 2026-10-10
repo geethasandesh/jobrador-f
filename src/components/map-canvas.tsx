@@ -96,7 +96,7 @@ function buildIndex(items: MapMarker[], selectedId: string | null): PinIndex {
     radius: touch ? 72 : 60,
     extent: 256,
     maxZoom: CLUSTER_MAX_ZOOM,
-    minPoints: 2,
+    minPoints: 11,
     map: (props) => ({ job: 0, lead: 0, place: 0, unknown: 0, [props.tone]: 1 }),
     reduce: (into, props) => {
       for (const tone of TONES) into[tone] += props[tone];

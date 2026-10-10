@@ -1,6 +1,7 @@
 import type { MapMarker } from "@/components/map-canvas";
 import type { Opportunity } from "@/lib/api/types";
 import { compactDistance } from "@/lib/format";
+import { PLACE_CHECKED_EMPTY, PLACE_CHECKING } from "@/lib/labels";
 
 export function markersFromOpportunities(
   items: Opportunity[],
@@ -25,9 +26,9 @@ export function markersFromOpportunities(
         subtitle: hiring
           ? (item.linkedJobTitle ?? "Hiring")
           : item.status === "UNCHECKED"
-            ? "Not checked yet"
+            ? PLACE_CHECKING
             : item.kind === "nearby_business"
-              ? "No public vacancy found"
+              ? PLACE_CHECKED_EMPTY
               : item.title,
         label: compactDistance(item.distanceKm),
         href: hrefFor(item),

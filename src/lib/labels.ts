@@ -30,6 +30,10 @@ export const CATEGORY_OPTIONS: Array<{ value: Category; label: string }> = [
   { value: "other", label: "Other" },
 ];
 
+export const PLACE_CHECKED_EMPTY = "The job boards are checked. You can walk in and ask.";
+
+export const PLACE_CHECKING = "Checking job boards for this place.";
+
 export const LANGUAGE_OPTIONS = [
   { value: "english_friendly", label: "English friendly" },
   { value: "german_required", label: "German required" },

@@ -109,7 +109,7 @@ export function ReportForm({
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!business && placeUnpicked) {
+    if (placeUnpicked) {
       setError("Pick a Berlin place from the list, or clear the field to keep the map spot.");
       return;
     }
@@ -171,24 +171,6 @@ export function ReportForm({
     </button>
   );
 
-  const typeChips = (
-    <div className="flex flex-wrap gap-2">
-      {LEAD_JOB_TYPE_OPTIONS.map((option) => {
-        const on = jobType === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setJobType(option.value)}
-            className={`rounded-full px-3 py-1.5 text-sm ${on ? "bg-ink text-white" : "bg-white text-ink ring-1 ring-line"}`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-
   const payFields = (
     <div className="grid gap-3">
       <label className="block text-sm font-medium">
@@ -211,65 +193,82 @@ export function ReportForm({
   return (
     <form onSubmit={onSubmit} className={embedded ? "" : "mx-auto max-w-xl px-4 py-8"}>
       {business ? (
-        <div className="overflow-hidden rounded-3xl border border-line bg-white">
-          <div className="border-b border-dashed border-line px-4 py-3">
-            <p className="text-[11px] font-bold tracking-[0.18em]">NOW HIRING</p>
-            <p className="mt-1 text-sm text-muted">A job from your business. You can stop hiring or delete it later.</p>
-          </div>
-          <div className="space-y-4 p-4">
-            <label className="block">
-              <span className="text-sm font-medium">Business name</span>
+        <div className="space-y-3">
+          <input
+            className="w-full border-0 border-b border-line bg-transparent px-0 py-1 text-2xl font-semibold outline-none placeholder:text-zinc-300"
+            required
+            minLength={2}
+            maxLength={80}
+            aria-label="Business name"
+            placeholder="Business name"
+            value={businessName}
+            onChange={(event) => setBusinessName(event.target.value)}
+          />
+          <textarea
+            className="field min-h-16"
+            required
+            minLength={10}
+            maxLength={500}
+            aria-label="Role you are hiring for"
+            placeholder="Role you are hiring for"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+          {embedded ? (
+            <div>
               <input
-                className="mt-1 w-full border-0 border-b border-line bg-transparent px-0 py-2 text-2xl font-semibold outline-none placeholder:text-zinc-300"
-                required
-                minLength={2}
-                maxLength={80}
-                placeholder="Café name"
-                value={businessName}
-                onChange={(event) => setBusinessName(event.target.value)}
+                value={placeQuery}
+                onChange={(event) => {
+                  setPlaceQuery(event.target.value);
+                  setPlaceHits([]);
+                }}
+                aria-label="Where in Berlin"
+                placeholder="Type a Berlin area"
+                className="field"
               />
-            </label>
-            <label className="block text-sm font-medium">
-              Role you are hiring for
-              <textarea
-                className="field mt-1 min-h-24"
-                required
-                minLength={10}
-                maxLength={500}
-                placeholder="Weekend barista, German not required"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </label>
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">Contract</legend>
-              {typeChips}
-            </fieldset>
-            <label className="block text-sm font-medium">
-              Kind of place
-              <select className="field mt-1" value={category} onChange={(event) => setCategory(event.target.value)}>
-                {CATEGORY_OPTIONS.map((option) => (
+              {placeHits.length === 0 ? <p className="mt-1 text-xs text-muted">Using {chosenArea}, unless you pick another place.</p> : null}
+              {placeHits.length > 0 ? (
+                <ul className="mt-1 overflow-hidden rounded-xl border border-line bg-white">
+                  {placeHits.map((place) => (
+                    <li key={`${place.label}-${place.latitude}`}>
+                      <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choosePlace(place)} className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50">
+                        {place.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <button type="button" onClick={useMyLocation} className="mt-1 text-sm font-semibold">
+                Use my location
+              </button>
+            </div>
+          ) : (
+            <>
+              {areaField}
+              {locationButton}
+            </>
+          )}
+          <select className="field" aria-label="Kind of place" value={category} onChange={(event) => setCategory(event.target.value)}>
+            {CATEGORY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">Add details</summary>
+            <div className="mt-3 space-y-3">
+              <select className="field" aria-label="Job type" value={jobType} onChange={(event) => setJobType(event.target.value)}>
+                {LEAD_JOB_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
-            </label>
-            {areaField}
-            {locationButton}
-            {point ? <p className="text-sm text-brand">Using your current location.</p> : null}
-            <label className="block text-sm font-medium">
-              Street address
-              <input className="field mt-1" maxLength={160} placeholder="Optional" value={address} onChange={(event) => setAddress(event.target.value)} />
-            </label>
-            <div className="rounded-2xl bg-zinc-50 p-3">
-              <p className="text-sm font-medium">Pay and hours</p>
-              <p className="mb-3 mt-1 text-sm text-muted">Leave these empty if you are not publishing them.</p>
+              <input className="field" aria-label="Address" maxLength={160} placeholder="Address, if you know it" value={address} onChange={(event) => setAddress(event.target.value)} />
               {payFields}
             </div>
-            {error ? <p className="text-sm text-place">{error}</p> : null}
-            <button type="submit" disabled={pending} className="w-full rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-              {pending ? "Posting…" : "Post this job"}
-            </button>
-          </div>
+          </details>
+          {error ? <p className="text-sm text-place">{error}</p> : null}
+          <button type="submit" disabled={pending} className="w-full rounded-2xl bg-ink px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
+            {pending ? "Posting…" : "Post this job"}
+          </button>
         </div>
       ) : (
         <div className="relative rounded-2xl bg-[#ffe56a] px-4 pt-5 pb-4">

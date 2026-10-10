@@ -1,6 +1,6 @@
 import type { Opportunity } from "@/lib/api/types";
 import { formatDistance, formatWhen } from "@/lib/format";
-import { categoryLabel, jobTypeLabel } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, PLACE_CHECKED_EMPTY, PLACE_CHECKING } from "@/lib/labels";
 import { KindBadge } from "./kind-badge";
 
 export function OpportunityCard({
@@ -20,9 +20,9 @@ export function OpportunityCard({
   const secondLine = hiring
     ? (item.linkedJobTitle ?? "Hiring")
     : unchecked
-      ? "Not checked yet"
+      ? PLACE_CHECKING
       : item.kind === "nearby_business"
-        ? "No public vacancy found"
+        ? PLACE_CHECKED_EMPTY
         : item.title;
 
   return (

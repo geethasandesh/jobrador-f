@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Logo } from "@/components/logo";
 import { AppContainer } from "@/components/ui/container-scroll-animation";
 import { MapCanvas, type MapMarker } from "@/components/map-canvas";
@@ -12,7 +12,7 @@ import { MyPosts } from "@/features/show/report/my-posts";
 import { ReportForm } from "@/features/show/report/report-form";
 import { MapToast } from "@/components/map-toast";
 import { SampleBanner } from "@/components/sample-banner";
-import { ApiError, getOpportunities, searchPlaces } from "@/lib/api/client";
+import { ApiError, getOpportunities, listAreaAlerts, removeAreaAlert, saveAreaAlert, searchPlaces } from "@/lib/api/client";
 import { toggleReferralPanel } from "@/lib/referral-panel";
 import type { Kind, OpportunityList } from "@/lib/api/types";
 import { markersFromOpportunities } from "@/lib/map-markers";
@@ -22,6 +22,17 @@ import {
   LANGUAGE_OPTIONS,
   SALARY_OPTIONS,
 } from "@/lib/labels";
+import {
+  adoptAreas,
+  forgetArea,
+  greenPins,
+  newsInArea,
+  readAreaAlerts,
+  rememberArea,
+  replaceArea,
+  sameWatch,
+  useAreaAlerts,
+} from "@/lib/area-alerts";
 import { removeRouteStop, useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
 import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
 import { signOut, useAuthReady, useSession } from "@/lib/session";
@@ -203,6 +214,13 @@ export function ExploreScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [jobAlert, setJobAlert] = useState<{
+    text: string;
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+    label: string;
+  } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [pinnedKind, setPinnedKind] = useState<Kind | null>(null);
@@ -214,6 +232,7 @@ export function ExploreScreen() {
   const authReady = useAuthReady();
   const session = useSession();
   const savedIds = useSavedJobs();
+  const areaAlerts = useAreaAlerts();
   const stops = useRoute();
   const visitCount = ready ? stops.length : 0;
   const savedCount = ready ? savedIds.length : 0;
@@ -321,56 +340,109 @@ export function ExploreScreen() {
   }, [authReady, guideRequested, session?.id]);
 
   useEffect(() => {
+    if (!session?.id) return;
+    let cancelled = false;
+    void listAreaAlerts()
+      .then((result) => {
+        if (!cancelled) adoptAreas(result.alerts);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.id]);
+
+  useEffect(() => {
     const controller = new AbortController();
     let timer = 0;
-    let attempt = 0;
-    let lastTotal = -1;
-    let stable = 0;
-
-    const load = () => {
-      getOpportunities(
-        {
-          latitude,
-          longitude,
-          radiusKm: Number.isFinite(radiusKm) ? radiusKm : 5,
-          q: q || undefined,
-          jobType: jobType || undefined,
-          category: category || undefined,
-          kinds: kinds || undefined,
-          language: language || undefined,
-          salary: salary || undefined,
-          sort,
-        },
-        controller.signal,
-      )
-        .then((result) => {
-          if (controller.signal.aborted) return;
-          setData(result);
-          setError(null);
-          setLoading(false);
-          if (result.total === lastTotal) stable += 1;
-          else stable = 0;
-          lastTotal = result.total;
-          attempt += 1;
-          const keepLooking = attempt < 5 && stable < 2;
-          setSearching(keepLooking);
-          if (keepLooking) timer = window.setTimeout(load, 4000);
-        })
-        .catch((caught: unknown) => {
-          if (controller.signal.aborted) return;
-          if (caught instanceof DOMException && caught.name === "AbortError") return;
-          setLoading(false);
-          setSearching(false);
-          setError(caught instanceof ApiError ? caught.message : "Could not load the map.");
-        });
+    const filters = {
+      latitude,
+      longitude,
+      radiusKm: Number.isFinite(radiusKm) ? radiusKm : 5,
+      q: q || undefined,
+      jobType: jobType || undefined,
+      category: category || undefined,
+      kinds: kinds || undefined,
+      language: language || undefined,
+      salary: salary || undefined,
+      sort,
     };
-
-    load();
+    getOpportunities(filters, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setData(result);
+        setError(null);
+        setLoading(false);
+        setSearching(false);
+        if (result.items.some((item) => item.status === "UNCHECKED")) {
+          timer = window.setTimeout(() => {
+            getOpportunities(filters, controller.signal)
+              .then((next) => {
+                if (!controller.signal.aborted) setData(next);
+              })
+              .catch(() => undefined);
+          }, 12000);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (controller.signal.aborted) return;
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        setLoading(false);
+        setSearching(false);
+        setError(caught instanceof ApiError ? caught.message : "Could not load the map.");
+      });
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
   }, [filtersKey, reloadKey, latitude, longitude, radiusKm, q, jobType, category, kinds, language, salary, sort]);
+
+  const openedPin = useRef<string | null>(null);
+  const pin = searchParams.get("pin");
+  useEffect(() => {
+    if (!pin || !data || openedPin.current === pin) return;
+    if (!data.items.some((item) => item.id === pin)) return;
+    openedPin.current = pin;
+    setSelectedId(pin);
+    setDetailsId(null);
+    setPanel(null);
+  }, [pin, data]);
+
+  useEffect(() => {
+    if (!data) return;
+    const watches = readAreaAlerts();
+    if (watches.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const watch of watches) {
+        const items = sameWatch(watch, latitude, longitude, radiusKm)
+          ? data.items
+          : (
+              await getOpportunities({
+                latitude: watch.latitude,
+                longitude: watch.longitude,
+                radiusKm: watch.radiusKm,
+              })
+            ).items;
+        if (cancelled) return;
+        const result = newsInArea(watch, items);
+        replaceArea(result.watch);
+        if (result.message) {
+          setJobAlert({
+            text: result.message,
+            latitude: watch.latitude,
+            longitude: watch.longitude,
+            radiusKm: watch.radiusKm,
+            label: watch.label,
+          });
+          return;
+        }
+      }
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [data, latitude, longitude, radiusKm]);
 
   const activeKinds = useMemo(() => {
     if (!kinds) return KINDS.map((kind) => kind.id);
@@ -699,10 +771,66 @@ export function ExploreScreen() {
           </div>
         ) : null}
         <SampleBanner dataSource={data?.dataSource} />
-        {searching ? (
-          <p className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm">Looking in this circle…</p>
+        {jobAlert ? (
+          <div className="flex max-w-[min(100%,24rem)] items-center gap-2 rounded-full bg-white py-1 pr-1 pl-4 text-sm font-semibold shadow-sm">
+            <span className="min-w-0 flex-1 py-1 text-left">{jobAlert.text}</span>
+            <button
+              type="button"
+              onClick={() => {
+                update({
+                  lat: jobAlert.latitude.toFixed(5),
+                  lng: jobAlert.longitude.toFixed(5),
+                  radiusKm: String(jobAlert.radiusKm),
+                  label: jobAlert.label,
+                  q: null,
+                  pin: null,
+                });
+                setJobAlert(null);
+              }}
+              className="rounded-full bg-ink px-3 py-1.5 text-white"
+            >
+              Show
+            </button>
+            <button type="button" onClick={() => setJobAlert(null)} className="rounded-full px-3 py-1.5 text-muted">
+              Hide
+            </button>
+          </div>
         ) : null}
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          const existing = areaAlerts.find((watch) => sameWatch(watch, latitude, longitude, radiusKm));
+          const place = label.replace(/, Berlin$/, "");
+          if (existing) {
+            forgetArea(existing.id);
+            void removeAreaAlert(existing.id).catch(() => undefined);
+            setToast(null);
+            return;
+          }
+          if (!session?.email) {
+            setToast("Log in so we can email you.");
+            return;
+          }
+          const radius = Number.isFinite(radiusKm) ? radiusKm : 5;
+          rememberArea({
+            label,
+            latitude,
+            longitude,
+            radiusKm: radius,
+            seen: greenPins(data?.items ?? []).map((item) => item.id),
+          });
+          void saveAreaAlert({ label, latitude, longitude, radiusKm: radius })
+            .then(() => setToast(`We'll email ${session.email} when a new job appears in ${place}.`))
+            .catch(() => setToast("Alert is on this device. The email could not be saved yet."));
+        }}
+        className="absolute bottom-20 left-1/2 z-[700] -translate-x-1/2 rounded-full border border-line bg-white px-4 py-2 text-sm font-semibold shadow-sm sm:bottom-6"
+      >
+        {areaAlerts.some((watch) => sameWatch(watch, latitude, longitude, radiusKm)) ? "Alerts on" : "Alert me here"}
+      </button>
+
+      {searching ? <MapSearchPulse /> : null}
 
       <nav className="absolute top-4 left-3 z-[700] hidden w-16 flex-col items-center gap-1 rounded-2xl bg-white py-2 text-[10px] font-medium text-muted shadow-[0_10px_30px_rgba(17,17,17,0.1)] sm:flex">
         <RailButton label="Discover" active={panel === null} onClick={() => setPanel(null)}>
@@ -741,19 +869,15 @@ export function ExploreScreen() {
       </nav>
 
       {panel ? (
-        <aside className={`absolute inset-x-2 top-2 z-[700] flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:inset-x-auto sm:top-4 sm:left-24 sm:w-[min(100%-1.5rem,360px)] ${panel === "filters" || panel === "visits" || panel === "report" ? "max-h-[calc(100%-5.5rem)] sm:max-h-[calc(100%-2rem)]" : "bottom-20 sm:bottom-6"}`}>
+        <aside className={`absolute inset-x-2 top-2 z-[700] flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:inset-x-auto sm:top-4 sm:left-24 sm:w-[min(100%-1.5rem,360px)] ${panel === "filters" || panel === "visits" || panel === "report" || panel === "post" ? "max-h-[calc(100%-5.5rem)] sm:max-h-[calc(100%-2rem)]" : "bottom-20 sm:bottom-6"}`}>
           {panel === "post" ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center justify-between px-4 pt-4">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#ff7a1a]">Your business</p>
-                  <h2 className="text-lg font-bold tracking-tight">Post a job</h2>
-                </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold tracking-tight">Post a job</h2>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
                   ×
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 <ReportForm
                   embedded
                   purpose="business"
@@ -775,10 +899,9 @@ export function ExploreScreen() {
                     });
                   }}
                 />
-                <button type="button" className="mt-4 text-sm font-semibold" onClick={() => setPanel("mine")}>
+                <button type="button" className="text-sm font-semibold" onClick={() => setPanel("mine")}>
                   Your posts
                 </button>
-              </div>
             </div>
           ) : panel === "mine" ? (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -987,7 +1110,7 @@ export function ExploreScreen() {
               <div className="flex items-center justify-between gap-3 px-4 pt-4">
                 <div>
                   <h2 className="text-lg font-bold tracking-tight">{label.split(",")[0]}</h2>
-                  <p className="text-sm text-muted">{loading || searching ? "Looking in this circle…" : `${visibleItems.length} places`}</p>
+                  <p className="text-sm text-muted">{loading || searching ? "Detecting…" : `${visibleItems.length} places`}</p>
                 </div>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close list">
                   ×
@@ -1091,6 +1214,22 @@ export function ExploreScreen() {
       </div>
       </AppContainer>
       {showGuide ? <HowToDialog onClose={() => dismissGuide()} onPostJob={() => dismissGuide(true)} /> : null}
+    </div>
+  );
+}
+
+function MapSearchPulse() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[650] grid place-items-center">
+      <div className="map-radar" aria-hidden>
+        <span className="map-radar-ping" />
+        <div className="map-radar-scope">
+          <span className="map-radar-rotor">
+            <span className="map-radar-wedge" />
+            <span className="map-radar-beam" />
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

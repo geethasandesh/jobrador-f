@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FactList } from "@/components/fact-list";
+import { ReadableText } from "@/components/readable-text";
 import { ClosedReport } from "@/features/show/details/closed-report";
 import { ConfirmLead } from "@/features/show/details/confirm-lead";
 import { RecordActions } from "@/features/show/details/record-actions";
@@ -9,12 +10,12 @@ import { ApiError, getBusiness, getJob, getLead } from "@/lib/api/client";
 import { OwnedPostActions } from "@/features/show/report/my-posts";
 import type { BusinessDetail, JobDetail, Kind, LeadDetail, Opportunity } from "@/lib/api/types";
 import { formatDistance, formatWhen } from "@/lib/format";
-import { categoryLabel, jobTypeLabel, sourceLabel } from "@/lib/labels";
+import { categoryLabel, jobTypeLabel, PLACE_CHECKED_EMPTY, PLACE_CHECKING, sourceLabel } from "@/lib/labels";
 
 const statusBar: Record<Kind, { label: string; className: string }> = {
   job: { label: "JOB LISTING", className: "bg-[#22c55e]" },
   community_lead: { label: "STUDENT REPORT", className: "bg-[#3b82f6]" },
-  nearby_business: { label: "NO PUBLIC VACANCY", className: "bg-[#f59e0b]" },
+  nearby_business: { label: "ASK IN PERSON", className: "bg-[#f59e0b]" },
 };
 
 export function PlacePanel({
@@ -44,7 +45,9 @@ export function PlacePanel({
     ? { label: "BUSINESS POST", className: "bg-[#7c3aed]" }
     : hiring
       ? { label: "HIRING", className: "bg-[#22c55e]" }
-      : statusBar[current.kind];
+      : item?.status === "UNCHECKED" && current.kind === "nearby_business"
+        ? { label: "CHECKING", className: "bg-[#9ca3af]" }
+        : statusBar[current.kind];
 
   useEffect(() => {
     setFocus(null);
@@ -56,7 +59,7 @@ export function PlacePanel({
     <article
       className={`absolute right-3 z-[700] flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.18)] sm:right-4 ${
         expanded
-          ? "top-4 bottom-24 w-[min(100%-1.5rem,420px)] sm:bottom-4"
+          ? "top-4 max-h-[calc(100%-6.5rem)] w-[min(100%-1.5rem,420px)] sm:max-h-[calc(100%-2rem)]"
           : "bottom-24 w-[min(100%-1.5rem,320px)] sm:top-4 sm:bottom-auto"
       }`}
     >
@@ -132,7 +135,7 @@ function Preview({
           </div>
         ) : (
           <p className={`mt-3 text-sm font-semibold ${item.status === "UNCHECKED" ? "text-muted" : "text-place"}`}>
-            {item.status === "UNCHECKED" ? "Not checked yet" : "No public vacancy found"}
+            {item.status === "UNCHECKED" ? PLACE_CHECKING : PLACE_CHECKED_EMPTY}
           </p>
         )
       ) : (
@@ -161,7 +164,13 @@ function Preview({
           id: item.id,
           kind: item.kind,
           title: item.businessName,
-          subtitle: hiring ? (item.linkedJobTitle ?? "Hiring") : item.kind === "nearby_business" ? "No public vacancy found" : item.title,
+          subtitle: hiring
+            ? (item.linkedJobTitle ?? "Hiring")
+            : item.kind === "nearby_business"
+              ? item.status === "UNCHECKED"
+                ? PLACE_CHECKING
+                : PLACE_CHECKED_EMPTY
+              : item.title,
           href: `/${path}/${item.id}`,
           latitude: item.latitude,
           longitude: item.longitude,
@@ -259,32 +268,37 @@ function DetailBody({
 
 function JobBody({ detail }: { detail: JobDetail }) {
   const { job, business } = detail;
+  const [open, setOpen] = useState(false);
   const posted = formatWhen(job.postedAt);
+  const facts = [
+    job.jobType !== "OTHER" ? { label: "Job type", value: jobTypeLabel(job.jobType) } : null,
+    job.category !== "other" ? { label: "Category", value: categoryLabel(job.category) } : null,
+    job.hoursLabel ? { label: "Hours", value: job.hoursLabel } : null,
+    job.salaryLabel ? { label: "Salary", value: job.salaryLabel } : null,
+    job.languageLabel ? { label: "Language", value: job.languageLabel } : null,
+    posted ? { label: "Posted", value: posted } : null,
+    { label: "Source", value: sourceLabel(job.sourceName) },
+  ].flatMap((row) => (row ? [row] : []));
   return (
     <>
       <h2 className="mt-3 text-2xl font-bold tracking-tight">{job.title}</h2>
-      <p className="mt-1 text-sm">{business?.name ?? "Unknown business"}</p>
-      <p className="mt-1 text-sm text-muted">
-        {business?.address ?? ""}
-        {job.distanceKm != null ? ` · ${formatDistance(job.distanceKm)} away` : ""}
+      <p className="mt-1 text-sm">
+        {business?.name ?? "Unknown business"}
+        {job.distanceKm != null ? <span className="text-muted"> · {formatDistance(job.distanceKm)} away</span> : null}
       </p>
       {job.status !== "ACTIVE" ? (
         <p className="mt-3 rounded-xl bg-place-soft px-3 py-2 text-sm text-place">
           This listing is {job.status.toLowerCase()} and is hidden from the map.
         </p>
       ) : null}
-      <p className="mt-4 text-sm leading-6">{job.descriptionSummary}</p>
-      <FactList
-        rows={[
-          { label: "Job type", value: jobTypeLabel(job.jobType) },
-          { label: "Category", value: categoryLabel(job.category) },
-          { label: "Hours", value: job.hoursLabel ?? null },
-          { label: "Salary", value: job.salaryLabel ?? null },
-          { label: "Language", value: job.languageLabel ?? null },
-          { label: "Posted", value: posted },
-          { label: "Source", value: sourceLabel(job.sourceName) },
-        ]}
-      />
+      {open ? <ReadableText text={job.descriptionSummary} /> : <p className="mt-3 line-clamp-3 text-sm leading-6">{job.descriptionSummary}</p>}
+      {open ? <FactList rows={facts} /> : null}
+      <button type="button" onClick={() => setOpen((value) => !value)} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold" aria-expanded={open}>
+        {open ? "See less" : "View more information"}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className={open ? "rotate-180" : ""}>
+          <path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       <a
         href={job.sourceUrl}
         target="_blank"
@@ -403,8 +417,8 @@ function BusinessBody({
       {activeJobs.length > 0 ? (
         <p className="mt-3 rounded-xl bg-job-soft px-3 py-2 text-sm font-semibold text-job">Hiring</p>
       ) : (
-        <p className="mt-3 rounded-xl bg-place-soft px-3 py-2 text-sm text-place">
-          No public vacancy found. You can visit and ask if they are currently hiring.
+        <p className={`mt-3 rounded-xl px-3 py-2 text-sm ${business.hiringCheckedAt ? "bg-place-soft text-place" : "bg-zinc-100 text-muted"}`}>
+          {business.hiringCheckedAt ? PLACE_CHECKED_EMPTY : PLACE_CHECKING}
         </p>
       )}
       <FactList

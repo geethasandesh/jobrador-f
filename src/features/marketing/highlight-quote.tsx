@@ -11,7 +11,7 @@ const quotes = [
     role: "Student jobs, on a map",
   },
   {
-    text: "A green pin is a posting we can open. A yellow pin means no public vacancy found. You can still visit and ask.",
+    text: "A green pin is a posting we can open. A yellow pin means the job boards are checked. You can walk in and ask.",
     name: "jobrador",
     role: "Honest pins",
   },

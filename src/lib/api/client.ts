@@ -338,6 +338,27 @@ export function addLibraryVisit(body: LibraryState["visits"][number]) {
   );
 }
 
+export function listAreaAlerts() {
+  return accountHeaders("Log in so we can email you.").then((headers) =>
+    request<{ alerts: Array<{ id: string; label: string; latitude: number; longitude: number; radiusKm: number }> }>(
+      "/v1/area-alerts",
+      { headers },
+    ),
+  );
+}
+
+export function saveAreaAlert(body: { label: string; latitude: number; longitude: number; radiusKm: number }) {
+  return accountHeaders("Log in so we can email you.").then((headers) =>
+    request<{ id: string }>("/v1/area-alerts", { method: "POST", headers, body: JSON.stringify(body) }),
+  );
+}
+
+export function removeAreaAlert(id: string) {
+  return accountHeaders("Log in so we can email you.").then((headers) =>
+    request<{ ok: true }>(`/v1/area-alerts/${encodeURIComponent(id)}`, { method: "DELETE", headers }),
+  );
+}
+
 export function removeLibraryVisit(id: string) {
   return accountHeaders("Log in to keep a visit list.").then((headers) =>
     request<{ ok: true }>(`/v1/library/visits/${encodeURIComponent(id)}`, { method: "DELETE", headers }),

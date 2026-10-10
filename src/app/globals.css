@@ -139,6 +139,75 @@ textarea {
   box-shadow: 0 4px 12px rgba(17, 17, 17, 0.25);
 }
 
+.map-radar {
+  position: relative;
+  width: min(78vw, 360px);
+  height: min(78vw, 360px);
+}
+
+.map-radar-scope {
+  position: absolute;
+  inset: 14%;
+  overflow: hidden;
+  border-radius: 9999px;
+}
+
+.map-radar-ping {
+  position: absolute;
+  inset: 30%;
+  border: 1.5px solid rgba(17, 17, 17, 0.35);
+  border-radius: 9999px;
+  animation: map-ping 2.4s ease-out infinite;
+}
+
+.map-radar-rotor {
+  position: absolute;
+  inset: 0;
+  animation: map-sweep 3.2s linear infinite;
+}
+
+.map-radar-wedge {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(17, 17, 17, 0.03) 22deg,
+    rgba(17, 17, 17, 0.08) 52deg,
+    rgba(17, 17, 17, 0.16) 78deg,
+    rgba(17, 17, 17, 0.28) 88deg,
+    transparent 93deg,
+    transparent 360deg
+  );
+}
+
+.map-radar-beam {
+  position: absolute;
+  top: calc(50% - 1px);
+  left: 50%;
+  width: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(17, 17, 17, 0.05), #111);
+}
+
+@keyframes map-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes map-ping {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
 .cluster-pin {
   display: grid;
   place-items: center;
