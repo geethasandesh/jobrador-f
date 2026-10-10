@@ -17,7 +17,7 @@ export function SiteColophon() {
           >
             Grahmind Innovations
           </a>{" "}
-          with extreme love, care, and passion for crafting software people will love to use.
+          with extreme love, care, and passion for crafting students will love to use.
         </p>
       </div>
       <div className="mt-9">

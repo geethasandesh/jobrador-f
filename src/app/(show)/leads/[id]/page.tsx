@@ -95,6 +95,8 @@ export default async function LeadPage({
           title: lead.businessName,
           subtitle: lead.title,
           href: `/leads/${lead.id}`,
+          latitude: lead.latitude,
+          longitude: lead.longitude,
         }}
       />
     </main>

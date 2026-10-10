@@ -18,11 +18,14 @@ export type MapMarker = {
   tone?: "unknown";
 };
 
+type MapPoint = { latitude: number; longitude: number };
+
 type MapCanvasProps = {
-  center: { latitude: number; longitude: number };
+  center: MapPoint;
   radiusKm: number;
   markers: MapMarker[];
   selectedId: string | null;
+  route?: MapPoint[] | null;
   onSelect: (id: string) => void;
   onPick?: (latitude: number, longitude: number) => void;
 };
@@ -261,11 +264,12 @@ function paintPins(state: PinState) {
   }
 }
 
-export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onPick }: MapCanvasProps) {
+export function MapCanvas({ center, radiusKm, markers, selectedId, route = null, onSelect, onPick }: MapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const pinsRef = useRef<PinState | null>(null);
   const circleRef = useRef<import("leaflet").Circle | null>(null);
+  const routeRef = useRef<import("leaflet").LayerGroup | null>(null);
   const onSelectRef = useRef(onSelect);
   const onPickRef = useRef(onPick);
   const [ready, setReady] = useState(false);
@@ -336,6 +340,7 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
       mapRef.current = null;
       pinsRef.current = null;
       circleRef.current = null;
+      routeRef.current = null;
       setReady(false);
     };
     // The map instance is created once. Later effects move it.
@@ -363,6 +368,59 @@ export function MapCanvas({ center, radiusKm, markers, selectedId, onSelect, onP
       })
       .addTo(pins.map);
   }, [ready, center.latitude, center.longitude, radiusKm]);
+
+  useEffect(() => {
+    const pins = pinsRef.current;
+    if (!ready || !pins) return;
+    routeRef.current?.remove();
+    routeRef.current = null;
+    if (!route || route.length < 2) return;
+    const group = pins.leaflet.layerGroup().addTo(pins.map);
+    const line = pins.leaflet
+      .polyline(
+        route.map((point) => [point.latitude, point.longitude]),
+        { color: "#111", weight: 4, opacity: 0.8, interactive: false },
+      )
+      .addTo(group);
+    const start = route[0]!;
+    const closed =
+      route.length > 2 &&
+      Math.abs(start.latitude - route[route.length - 1]!.latitude) < 1e-4 &&
+      Math.abs(start.longitude - route[route.length - 1]!.longitude) < 1e-4;
+    const numbered = closed ? route.slice(1, -1) : route;
+    if (closed) {
+      pins.leaflet
+        .marker([start.latitude, start.longitude], {
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 1000,
+          icon: pins.leaflet.divIcon({
+            className: "pin-wrap",
+            html: `<span class="route-start"></span>`,
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          }),
+        })
+        .addTo(group);
+    }
+    numbered.forEach((point, index) => {
+      pins.leaflet
+        .marker([point.latitude, point.longitude], {
+          interactive: false,
+          keyboard: false,
+          zIndexOffset: 1000,
+          icon: pins.leaflet.divIcon({
+            className: "pin-wrap",
+            html: `<span class="route-stop">${index + 1}</span>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+          }),
+        })
+        .addTo(group);
+    });
+    routeRef.current = group;
+    pins.map.fitBounds(line.getBounds().pad(0.3), { animate: true, maxZoom: 15, padding: [48, 48] });
+  }, [ready, route]);
 
   useEffect(() => {
     const pins = pinsRef.current;

@@ -64,6 +64,8 @@ export default async function BusinessPage({
           title: business.name,
           subtitle: business.area,
           href: `/businesses/${business.id}`,
+          latitude: business.latitude,
+          longitude: business.longitude,
         }}
       />
 

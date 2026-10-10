@@ -89,6 +89,8 @@ export default async function JobPage({
           title: business?.name ?? job.title,
           subtitle: job.title,
           href: `/jobs/${job.id}`,
+          latitude: job.latitude,
+          longitude: job.longitude,
         }}
       />
     </main>

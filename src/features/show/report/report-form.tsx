@@ -2,10 +2,10 @@
 
 import { Caveat } from "next/font/google";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { ApiError, createLead } from "@/lib/api/client";
+import { useEffect, useState } from "react";
+import { ApiError, createLead, searchPlaces } from "@/lib/api/client";
 import { CATEGORY_OPTIONS, LEAD_JOB_TYPE_OPTIONS } from "@/lib/labels";
-import { BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
 
 const handwriting = Caveat({ weight: "600", subsets: ["latin"] });
 
@@ -36,37 +36,83 @@ export function ReportForm({
   const [hoursMin, setHoursMin] = useState("");
   const [hoursMax, setHoursMax] = useState("");
   const [point, setPoint] = useState<{ latitude: number; longitude: number; area: string } | null>(
-    embedded && !matchedPlace && latitude != null && longitude != null
-      ? { latitude, longitude, area: areaLabel || "Your location" }
+    embedded && latitude != null && longitude != null
+      ? { latitude, longitude, area: areaLabel || "This spot" }
       : null,
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeHits, setPlaceHits] = useState<Array<{ label: string; latitude: number; longitude: number }>>([]);
 
   const place = BERLIN_PLACES.find((item) => item.id === placeId) ?? DEFAULT_PLACE;
   const location = point ?? { latitude: place.latitude, longitude: place.longitude, area: place.label };
   const business = purpose === "business";
+  const chosenArea = location.area.split(",")[0] ?? location.area;
+  const placeUnpicked = placeQuery.trim().length > 0 && placeQuery.trim().toLowerCase() !== chosenArea.toLowerCase();
+
+  useEffect(() => {
+    const query = placeQuery.trim();
+    if (query.length < 2 || query.toLowerCase() === chosenArea.toLowerCase()) return;
+    const controller = new AbortController();
+    const handle = window.setTimeout(() => {
+      searchPlaces(query, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          if (result.outsideBerlin) {
+            setPlaceHits([]);
+            setError(BERLIN_ONLY_MESSAGE);
+            return;
+          }
+          setError(null);
+          setPlaceHits(result.places);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setPlaceHits([]);
+        });
+    }, 250);
+    return () => {
+      controller.abort();
+      window.clearTimeout(handle);
+    };
+  }, [placeQuery, chosenArea]);
+
+  function choosePlace(place: { label: string; latitude: number; longitude: number }) {
+    setPoint({ latitude: place.latitude, longitude: place.longitude, area: place.label });
+    setPlaceQuery(place.label.split(",")[0] ?? place.label);
+    setPlaceHits([]);
+    setError(null);
+  }
 
   function useMyLocation() {
-    if (!navigator.geolocation) {
-      setError("This browser cannot share a location. Pick an area instead.");
+    if (!navigator.geolocation || !window.isSecureContext) {
+      setError("This page cannot read your location. Type the Berlin area instead.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setPoint({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          area: "Your location",
-        });
+        const nextLatitude = position.coords.latitude;
+        const nextLongitude = position.coords.longitude;
+        const inside = nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
+        if (!inside) {
+          setError(BERLIN_ONLY_MESSAGE);
+          return;
+        }
+        setPoint({ latitude: nextLatitude, longitude: nextLongitude, area: "Your location" });
+        setPlaceQuery("");
+        setPlaceHits([]);
         setError(null);
       },
-      () => setError("Location was blocked. Pick an area instead."),
+      () => setError("Location was blocked. Type the Berlin area instead."),
     );
   }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (!business && placeUnpicked) {
+      setError("Pick a Berlin place from the list, or clear the field to keep the map spot.");
+      return;
+    }
     setPending(true);
     setError(null);
     try {
@@ -226,57 +272,84 @@ export function ReportForm({
           </div>
         </div>
       ) : (
-        <div className="relative bg-[#ffe56a] px-4 pb-5 pt-6 shadow-[0_14px_30px_rgba(20,20,20,0.16)]">
+        <div className="relative rounded-2xl bg-[#ffe56a] px-4 pt-5 pb-4">
           <span className="absolute -top-2 left-1/2 h-4 w-16 -translate-x-1/2 rotate-[-8deg] bg-white/70" aria-hidden />
-          <p className={`${handwriting.className} text-3xl leading-none text-ink`}>I saw a place hiring</p>
-          <p className="mt-2 text-sm text-ink/70">A student tip. It is not a confirmed job.</p>
-          <div className="mt-4 space-y-4">
-            <label className="block">
-              <span className="text-sm font-medium">Place</span>
-              <input
-                className={`${handwriting.className} mt-1 w-full border-0 border-b border-ink/20 bg-transparent px-0 py-1 text-3xl text-ink outline-none placeholder:text-ink/35`}
-                required
-                minLength={2}
-                maxLength={80}
-                placeholder="The café on the corner"
-                value={businessName}
-                onChange={(event) => setBusinessName(event.target.value)}
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              What I noticed
-              <textarea
-                className="mt-1 min-h-28 w-full resize-none bg-white/50 px-3 py-2 text-sm outline-none placeholder:text-ink/40"
-                required
-                minLength={10}
-                maxLength={500}
-                placeholder="A sign in the window said they need weekend help"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </label>
-            {areaField}
-            {locationButton}
-            {point ? <p className="text-sm">Using your current location.</p> : null}
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">It looked like</legend>
-              {typeChips}
-            </fieldset>
-            <label className="block text-sm font-medium">
-              Kind of place
-              <select className="field mt-1" value={category} onChange={(event) => setCategory(event.target.value)}>
-                {CATEGORY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            <details className="rounded-2xl bg-white/45 p-3">
-              <summary className="cursor-pointer text-sm font-medium">Address, pay, or hours — only if I actually know</summary>
+          <p className={`${handwriting.className} text-2xl leading-none text-ink`}>I saw a place hiring</p>
+          <p className="mt-1 text-xs text-ink/70">Not a confirmed job.</p>
+          <div className="mt-3 space-y-3">
+            <input
+              className={`${handwriting.className} w-full border-0 border-b border-ink/20 bg-transparent px-0 py-1 text-2xl text-ink outline-none placeholder:text-ink/35`}
+              required
+              minLength={2}
+              maxLength={80}
+              aria-label="Place"
+              placeholder="The café on the corner"
+              value={businessName}
+              onChange={(event) => setBusinessName(event.target.value)}
+            />
+            <textarea
+              className="min-h-16 w-full resize-none bg-white/50 px-3 py-2 text-sm outline-none placeholder:text-ink/40"
+              required
+              minLength={10}
+              maxLength={500}
+              aria-label="What I noticed"
+              placeholder="A sign in the window said they need weekend help"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+            {embedded ? (
+              <div>
+                <input
+                  value={placeQuery}
+                  onChange={(event) => {
+                    setPlaceQuery(event.target.value);
+                    setPlaceHits([]);
+                  }}
+                  aria-label="Where in Berlin"
+                  placeholder="Type a Berlin area"
+                  className="w-full bg-white/50 px-3 py-2 text-sm outline-none placeholder:text-ink/40"
+                />
+                {placeHits.length === 0 ? <p className="mt-1 text-xs text-ink/70">Using {chosenArea}, unless you pick another place.</p> : null}
+                {placeHits.length > 0 ? (
+                  <ul className="mt-1 overflow-hidden rounded-xl bg-white">
+                    {placeHits.map((place) => (
+                      <li key={`${place.label}-${place.latitude}`}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => choosePlace(place)}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-zinc-50"
+                        >
+                          {place.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <button type="button" onClick={useMyLocation} className="mt-1 text-sm font-semibold">
+                  Use my location
+                </button>
+              </div>
+            ) : (
+              <>
+                {areaField}
+                {locationButton}
+              </>
+            )}
+            <select className="field" aria-label="Kind of place" value={category} onChange={(event) => setCategory(event.target.value)}>
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium">Add details</summary>
               <div className="mt-3 space-y-3">
-                <label className="block text-sm font-medium">
-                  Address
-                  <input className="field mt-1" maxLength={160} value={address} onChange={(event) => setAddress(event.target.value)} />
-                </label>
+                <select className="field" aria-label="Job type" value={jobType} onChange={(event) => setJobType(event.target.value)}>
+                  {LEAD_JOB_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input className="field" aria-label="Address" maxLength={160} placeholder="Address, if you know it" value={address} onChange={(event) => setAddress(event.target.value)} />
                 {payFields}
               </div>
             </details>

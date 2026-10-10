@@ -163,6 +163,8 @@ function Preview({
           title: item.businessName,
           subtitle: hiring ? (item.linkedJobTitle ?? "Hiring") : item.kind === "nearby_business" ? "No public vacancy found" : item.title,
           href: `/${path}/${item.id}`,
+          latitude: item.latitude,
+          longitude: item.longitude,
         }}
       />
     </>
@@ -301,6 +303,8 @@ function JobBody({ detail }: { detail: JobDetail }) {
           title: business?.name ?? job.title,
           subtitle: job.title,
           href: `/jobs/${job.id}`,
+          latitude: job.latitude,
+          longitude: job.longitude,
         }}
       />
     </>
@@ -372,6 +376,8 @@ function LeadBody({
           title: lead.businessName,
           subtitle: lead.title,
           href: `/leads/${lead.id}`,
+          latitude: lead.latitude,
+          longitude: lead.longitude,
         }}
       />
     </>
@@ -424,6 +430,8 @@ function BusinessBody({
           title: business.name,
           subtitle: business.area,
           href: `/businesses/${business.id}`,
+          latitude: business.latitude,
+          longitude: business.longitude,
         }}
       />
       {activeJobs.length > 0 ? (

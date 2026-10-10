@@ -14,6 +14,8 @@ export type RouteStop = {
   title: string;
   subtitle: string;
   href: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type SavedItem = {
@@ -101,8 +103,16 @@ export async function adoptLibrary(accountId: string) {
   const remote = adopted === accountId
     ? await readLibrary()
     : await mergeLibrary({ saved: readSavedItems(), visits: readRoute() });
+  const kept = readRoute();
   writeJson(SAVED_KEY, remote.saved);
-  writeJson(ROUTE_KEY, remote.visits);
+  writeJson(
+    ROUTE_KEY,
+    remote.visits.map((visit) => {
+      const local = kept.find((item) => item.id === visit.id);
+      if (local?.latitude == null || local.longitude == null) return visit;
+      return { ...visit, latitude: local.latitude, longitude: local.longitude };
+    }),
+  );
   window.localStorage.setItem(ADOPT_KEY, accountId);
 }
 

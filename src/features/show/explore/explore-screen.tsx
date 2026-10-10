@@ -19,14 +19,13 @@ import { markersFromOpportunities } from "@/lib/map-markers";
 import {
   CATEGORY_OPTIONS,
   JOB_TYPE_OPTIONS,
-  KIND_LABEL,
   LANGUAGE_OPTIONS,
   SALARY_OPTIONS,
 } from "@/lib/labels";
 import { removeRouteStop, useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
 import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
 import { signOut, useAuthReady, useSession } from "@/lib/session";
-import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, DEFAULT_PLACE } from "@/lib/places";
 
 const KINDS: Array<{ id: Kind; label: string }> = [
   { id: "job", label: "Jobs" },
@@ -36,15 +35,157 @@ const KINDS: Array<{ id: Kind; label: string }> = [
 
 const RADII = ["1", "2", "5", "10"];
 
-const PLACE_FILTERS = [
-  { value: "restaurant", label: "Restaurant" },
-  { value: "cafe", label: "Café" },
-  { value: "hotel", label: "Hotel" },
-  { value: "retail", label: "Retail" },
-  { value: "warehouse", label: "Warehouse" },
-  { value: "logistics", label: "Logistics" },
-  { value: "other", label: "Other" },
-];
+function routePoints(
+  stops: Array<{ id: string; latitude?: number; longitude?: number }>,
+  items: Array<{ id: string; latitude: number; longitude: number }>,
+) {
+  return stops.flatMap((stop) => {
+    if (stop.latitude != null && stop.longitude != null) return [{ latitude: stop.latitude, longitude: stop.longitude }];
+    const item = items.find((entry) => entry.id === stop.id);
+    return item ? [{ latitude: item.latitude, longitude: item.longitude }] : [];
+  });
+}
+
+type RoutePoint = { latitude: number; longitude: number };
+
+function kmBetween(from: RoutePoint, to: RoutePoint) {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitude = radians(to.latitude - from.latitude);
+  const longitude = radians(to.longitude - from.longitude);
+  const haversine =
+    Math.sin(latitude / 2) ** 2 +
+    Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(longitude / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(haversine)));
+}
+
+// Shortest loop that leaves the start, visits every stop once, and comes back.
+function roundTrip(start: RoutePoint, stops: RoutePoint[]) {
+  const points = [start, ...stops];
+  const dist = points.map((from) => points.map((to) => kmBetween(from, to)));
+  const order = points.length <= 13 ? exactLoop(dist) : improveLoop(dist, nearestLoop(dist));
+  return [...order.map((index) => points[index]!), start];
+}
+
+function exactLoop(dist: number[][]) {
+  const stops = dist.length - 1;
+  const size = 1 << stops;
+  const cost = Array.from({ length: size }, () => Array<number>(stops).fill(Number.POSITIVE_INFINITY));
+  const previous = Array.from({ length: size }, () => Array<number>(stops).fill(-1));
+  for (let stop = 0; stop < stops; stop += 1) cost[1 << stop]![stop] = dist[0]![stop + 1]!;
+  for (let seen = 1; seen < size; seen += 1) {
+    for (let stop = 0; stop < stops; stop += 1) {
+      if ((seen & (1 << stop)) === 0 || !Number.isFinite(cost[seen]![stop]!)) continue;
+      for (let next = 0; next < stops; next += 1) {
+        if (seen & (1 << next)) continue;
+        const nextSeen = seen | (1 << next);
+        const nextCost = cost[seen]![stop]! + dist[stop + 1]![next + 1]!;
+        if (nextCost < cost[nextSeen]![next]!) {
+          cost[nextSeen]![next] = nextCost;
+          previous[nextSeen]![next] = stop;
+        }
+      }
+    }
+  }
+  let end = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let stop = 0; stop < stops; stop += 1) {
+    const total = cost[size - 1]![stop]! + dist[stop + 1]![0]!;
+    if (total < best) {
+      best = total;
+      end = stop;
+    }
+  }
+  const sequence: number[] = [];
+  let seen = size - 1;
+  let stop = end;
+  while (stop !== -1) {
+    sequence.push(stop + 1);
+    const before = previous[seen]![stop]!;
+    seen &= ~(1 << stop);
+    stop = before;
+  }
+  return [0, ...sequence.reverse()];
+}
+
+function nearestLoop(dist: number[][]) {
+  const remaining = new Set(dist.map((_, index) => index).slice(1));
+  const order = [0];
+  while (remaining.size > 0) {
+    const here = order[order.length - 1]!;
+    let next = -1;
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const candidate of remaining) {
+      if (dist[here]![candidate]! < nearest) {
+        nearest = dist[here]![candidate]!;
+        next = candidate;
+      }
+    }
+    order.push(next);
+    remaining.delete(next);
+  }
+  return order;
+}
+
+function loopLength(order: number[], dist: number[][]) {
+  let total = dist[order[order.length - 1]!]![order[0]!]!;
+  for (let index = 0; index < order.length - 1; index += 1) total += dist[order[index]!]![order[index + 1]!]!;
+  return total;
+}
+
+function improveLoop(dist: number[][], seed: number[]) {
+  let order = seed.slice();
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (let start = 1; start < order.length - 1; start += 1) {
+      for (let end = start + 1; end < order.length; end += 1) {
+        const swapped = order.slice();
+        swapped.splice(start, end - start + 1, ...order.slice(start, end + 1).reverse());
+        if (loopLength(swapped, dist) + 1e-9 < loopLength(order, dist)) {
+          order = swapped;
+          improved = true;
+        }
+      }
+    }
+  }
+  return order;
+}
+
+function sameSpot(left: RoutePoint, right: RoutePoint) {
+  return Math.abs(left.latitude - right.latitude) < 1e-4 && Math.abs(left.longitude - right.longitude) < 1e-4;
+}
+
+function stopsInLoopOrder<T extends { id: string; latitude?: number; longitude?: number }>(
+  stops: T[],
+  items: Array<{ id: string; latitude: number; longitude: number }>,
+  loop: RoutePoint[],
+) {
+  const located = stops.map((stop) => ({ stop, point: routePoints([stop], items)[0] ?? null }));
+  const used = new Set<string>();
+  const ordered: T[] = [];
+  for (const point of loop.slice(1, -1)) {
+    const match = located.find((entry) => entry.point && !used.has(entry.stop.id) && sameSpot(entry.point, point));
+    if (!match) continue;
+    used.add(match.stop.id);
+    ordered.push(match.stop);
+  }
+  for (const entry of located) if (!used.has(entry.stop.id)) ordered.push(entry.stop);
+  return ordered;
+}
+
+function walkingRouteUrl(points: Array<{ latitude: number; longitude: number }>) {
+  const origin = points[0];
+  const destination = points[points.length - 1];
+  if (!origin || !destination) return "https://www.google.com/maps";
+  const via = points.slice(1, -1).slice(0, 9);
+  const url = new URL("https://www.google.com/maps/dir/");
+  url.searchParams.set("api", "1");
+  url.searchParams.set("travelmode", "walking");
+  url.searchParams.set("origin", `${origin.latitude},${origin.longitude}`);
+  url.searchParams.set("destination", `${destination.latitude},${destination.longitude}`);
+  if (via.length > 0) url.searchParams.set("waypoints", via.map((point) => `${point.latitude},${point.longitude}`).join("|"));
+  return url.toString();
+}
 
 function param(value: string | null, fallback = "") {
   return value ?? fallback;
@@ -67,6 +208,7 @@ export function ExploreScreen() {
   const [pinnedKind, setPinnedKind] = useState<Kind | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [panel, setPanel] = useState<"list" | "filters" | "visits" | "report" | "post" | "mine" | null>(null);
+  const [routeLine, setRouteLine] = useState<Array<{ latitude: number; longitude: number }> | null>(null);
   const [savedOnly, setSavedOnly] = useState(false);
   const ready = useClientReady();
   const authReady = useAuthReady();
@@ -323,6 +465,10 @@ export function ExploreScreen() {
         <div className="hidden shrink-0 sm:block">
           <Logo compact href="/map" />
         </div>
+        <div className="flex min-w-0 items-center gap-2 sm:contents">
+        <div className="shrink-0 sm:hidden">
+          <Logo compact href="/map" />
+        </div>
         <div className="relative min-w-0 flex-1">
         <form
           className="flex min-w-0 items-center gap-2 rounded-full border border-line bg-white py-1 pl-3 pr-1 shadow-[0_8px_30px_rgba(17,17,17,0.08)]"
@@ -430,6 +576,7 @@ export function ExploreScreen() {
           </ul>
         ) : null}
         </div>
+        </div>
         <div className="grid shrink-0 grid-cols-4 gap-1.5 sm:flex sm:gap-2">
           <button
             type="button"
@@ -507,6 +654,7 @@ export function ExploreScreen() {
         radiusKm={Number.isFinite(radiusKm) ? radiusKm : 5}
         markers={markers}
         selectedId={selectedId}
+        route={routeLine}
         onSelect={(id) => {
           setSelectedId(id);
           setDetailsId(null);
@@ -534,6 +682,22 @@ export function ExploreScreen() {
 
       <div className="absolute inset-x-3 top-3 z-[700] flex flex-col items-center gap-2 sm:inset-x-24 sm:top-4">
         <MapToast message={toast} />
+        {routeLine ? (
+          <div className="flex items-center gap-2 rounded-full bg-white py-1 pr-1 pl-4 text-sm font-semibold shadow-sm">
+            Round trip
+            <a
+              href={walkingRouteUrl(routeLine)}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full bg-ink px-3 py-1.5 text-white"
+            >
+              Open in Maps
+            </a>
+            <button type="button" onClick={() => setRouteLine(null)} className="rounded-full px-3 py-1.5 text-muted" aria-label="Hide route">
+              Hide
+            </button>
+          </div>
+        ) : null}
         <SampleBanner dataSource={data?.dataSource} />
         {searching ? (
           <p className="rounded-full bg-white px-3 py-1 text-sm font-medium shadow-sm">Looking in this circle…</p>
@@ -577,7 +741,7 @@ export function ExploreScreen() {
       </nav>
 
       {panel ? (
-        <aside className="absolute inset-x-2 top-2 bottom-20 z-[700] flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:inset-x-auto sm:top-4 sm:bottom-6 sm:left-24 sm:w-[min(100%-1.5rem,360px)]">
+        <aside className={`absolute inset-x-2 top-2 z-[700] flex flex-col overflow-hidden rounded-3xl bg-white shadow-[0_18px_50px_rgba(17,17,17,0.16)] sm:inset-x-auto sm:top-4 sm:left-24 sm:w-[min(100%-1.5rem,360px)] ${panel === "filters" || panel === "visits" || panel === "report" ? "max-h-[calc(100%-5.5rem)] sm:max-h-[calc(100%-2rem)]" : "bottom-20 sm:bottom-6"}`}>
           {panel === "post" ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between px-4 pt-4">
@@ -642,17 +806,13 @@ export function ExploreScreen() {
               </div>
             </div>
           ) : panel === "report" ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center justify-between px-4 pt-4">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#3b82f6]">Student tip</p>
-                  <h2 className="text-lg font-bold tracking-tight">Share a tip</h2>
-                </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold tracking-tight">Share a tip</h2>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close">
                   ×
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 <ReportForm
                   embedded
                   areaLabel={label}
@@ -672,119 +832,139 @@ export function ExploreScreen() {
                     });
                   }}
                 />
-              </div>
             </div>
           ) : panel === "visits" ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center justify-between px-4 pt-4">
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold tracking-tight">Visit list</h2>
                 <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close visit list">
                   ×
                 </button>
               </div>
-              <p className="px-4 pt-1 text-sm text-muted">Stops stay on this device, in the order you added them.</p>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
-                {stops.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-line p-4 text-sm text-muted">No stops yet. Add them from a place card.</p>
-                ) : (
-                  stops.map((stop, index) => (
-                    <article key={stop.id} className="rounded-2xl border border-line p-3">
-                      <p className="text-xs font-semibold text-muted">Stop {index + 1}</p>
-                      <h3 className="mt-1 font-semibold">{stop.title}</h3>
-                      <p className="text-sm text-muted">{KIND_LABEL[stop.kind]} · {stop.subtitle}</p>
-                      <div className="mt-2 flex gap-3 text-sm">
-                        <button
-                          type="button"
-                          className="font-semibold"
-                          onClick={() => openDetails(stop.id, stop.kind)}
-                        >
-                          View
-                        </button>
-                        <button type="button" className="text-muted" onClick={() => removeRouteStop(stop.id)}>
-                          Remove
-                        </button>
-                      </div>
-                    </article>
-                  ))
-                )}
-              </div>
+              {stops.length === 0 ? (
+                <p className="text-sm text-muted">No stops yet. Add them from a place.</p>
+              ) : (
+                <>
+                  {stops.length >= 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const points = routePoints(stops, data?.items ?? []);
+                      if (points.length < 2) {
+                        setToast(points.length === 0 ? "These stops have no map point yet. Add them again from the map." : "Add one more stop to get a route.");
+                        return;
+                      }
+                      if (points.length < stops.length) setToast("Some stops have no map point, so the route skips them.");
+                      else if (points.length > 9) setToast("Maps opens the first 9 stops. The line shows the full round trip.");
+                      setRouteLine(roundTrip({ latitude, longitude }, points));
+                      setPanel(null);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-ink py-2.5 text-sm font-semibold text-white"
+                  >
+                    <RouteIcon />
+                    Get route
+                  </button>
+                  ) : null}
+                  {(routeLine ? stopsInLoopOrder(stops, data?.items ?? [], routeLine) : stops).map((stop, index) => (
+                    <div key={stop.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openDetails(stop.id, stop.kind)}
+                        className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-zinc-100 text-xs font-bold">{index + 1}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{stop.title}</span>
+                          <span className="block truncate text-xs text-muted">{stop.subtitle}</span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2 text-lg leading-none text-muted"
+                        aria-label={`Remove ${stop.title}`}
+                        onClick={() => {
+                          removeRouteStop(stop.id);
+                          setRouteLine(null);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           ) : panel === "filters" ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold tracking-tight">Filters</h2>
-                <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close filters">
-                  ×
-                </button>
-              </div>
-              <p className="text-sm text-muted">{label}</p>
-              <div className="flex gap-2 overflow-x-auto">
-                {BERLIN_PLACES.map((place) => (
-                  <button
-                    key={place.id}
-                    type="button"
-                    onClick={() =>
-                      update({
-                        lat: String(place.latitude),
-                        lng: String(place.longitude),
-                        label: place.label,
-                        q: null,
-                      })
-                    }
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-sm ${label === place.label ? "bg-ink text-white" : "bg-zinc-100 text-ink"}`}
-                  >
-                    {place.label.split(",")[0]}
+                <div className="flex items-center gap-3">
+                  {filtersActive ? (
+                    <button type="button" className="text-sm font-semibold text-muted" onClick={() => update({ q: null, jobType: null, category: null, language: null, salary: null, kinds: null })}>
+                      Reset
+                    </button>
+                  ) : null}
+                  <button type="button" className="text-xl leading-none text-muted" onClick={() => setPanel(null)} aria-label="Close filters">
+                    ×
                   </button>
-                ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={goToMyLocation}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-zinc-100 py-2.5 text-sm font-semibold"
+              >
+                <LocateIcon />
+                Use my location
+              </button>
+              {notice ? <p className="text-sm text-place">{notice}</p> : null}
+              <div className="grid grid-cols-4 gap-1 rounded-full bg-zinc-100 p-1" role="group" aria-label="Distance">
                 {RADII.map((radius) => (
                   <button
                     key={radius}
                     type="button"
+                    aria-pressed={String(radiusKm) === radius}
                     onClick={() => update({ radiusKm: radius })}
-                    className={`rounded-full px-3 py-1.5 text-sm ${String(radiusKm) === radius ? "bg-ink text-white" : "bg-zinc-100"}`}
+                    className={`rounded-full py-1.5 text-sm ${String(radiusKm) === radius ? "bg-white font-semibold shadow-sm" : "text-muted"}`}
                   >
                     {radius} km
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {PLACE_FILTERS.map((place) => (
-                  <button
-                    key={place.value}
-                    type="button"
-                    aria-pressed={category === place.value}
-                    onClick={() => update({ category: category === place.value ? null : place.value })}
-                    className={`rounded-full px-3 py-1.5 text-sm ${category === place.value ? "bg-ink text-white" : "bg-zinc-100"}`}
-                  >
-                    {place.label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-3 gap-1 rounded-full bg-zinc-100 p-1" role="group" aria-label="What to show">
                 {KINDS.map((kind) => (
                   <button
                     key={kind.id}
                     type="button"
                     aria-pressed={activeKinds.includes(kind.id)}
                     onClick={() => toggleKind(kind.id)}
-                    className={`rounded-full px-3 py-1.5 text-sm ${activeKinds.includes(kind.id) ? "bg-ink text-white" : "bg-zinc-100 text-muted"}`}
+                    className={`rounded-full py-1.5 text-sm ${activeKinds.includes(kind.id) ? "bg-white font-semibold shadow-sm" : "text-muted"}`}
                   >
                     {kind.label}
                   </button>
                 ))}
               </div>
+              <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1" role="group" aria-label="Place type">
+                {CATEGORY_OPTIONS.map((option) => {
+                  const active = category === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => update({ category: active ? null : option.value })}
+                      className={`flex w-16 shrink-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 ${active ? "bg-ink text-white" : "bg-zinc-100 text-ink"}`}
+                    >
+                      <CategoryIcon name={option.value} />
+                      <span className="text-center text-[11px] leading-tight">{option.value === "customer_service" ? "Service" : option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
               <div className="grid gap-2">
                 <select className="field" aria-label="Job type" value={jobType} onChange={(event) => update({ jobType: event.target.value || null })}>
                   <option value="">Any job type</option>
                   {JOB_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <select className="field" aria-label="Category" value={category} onChange={(event) => update({ category: event.target.value || null })}>
-                  <option value="">Any category</option>
-                  {CATEGORY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
@@ -800,20 +980,7 @@ export function ExploreScreen() {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                <select className="field" aria-label="Sort" value={sort} onChange={(event) => update({ sort: event.target.value })}>
-                  <option value="distance">Nearest</option>
-                  <option value="newest">Newest</option>
-                </select>
               </div>
-              <button type="button" onClick={goToMyLocation} className="text-sm font-semibold">
-                Use my location
-              </button>
-              {notice ? <p className="text-sm text-place">{notice}</p> : null}
-              {filtersActive ? (
-                <button type="button" className="text-sm font-semibold" onClick={() => update({ q: null, jobType: null, category: null, language: null, salary: null, kinds: null })}>
-                  Clear filters
-                </button>
-              ) : null}
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
@@ -1036,6 +1203,107 @@ function ClockIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+function CategoryIcon({ name }: { name: string }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (name === "restaurant") {
+    return (
+      <svg {...common}>
+        <path d="M7 3v7M5 3v5M9 3v5M7 10v11M17 3v18M17 8h2.5a2 2 0 0 0 0-4H17" />
+      </svg>
+    );
+  }
+  if (name === "cafe") {
+    return (
+      <svg {...common}>
+        <path d="M5 8h11v5a5 5 0 0 1-10 0V8ZM16 9h2.2a2.4 2.4 0 0 1 0 4.8H16M7 21h8" />
+      </svg>
+    );
+  }
+  if (name === "retail") {
+    return (
+      <svg {...common}>
+        <path d="M6 8h12l-1 12H7L6 8ZM9 8V6.5a3 3 0 0 1 6 0V8" />
+      </svg>
+    );
+  }
+  if (name === "warehouse") {
+    return (
+      <svg {...common}>
+        <path d="M3 10 12 4l9 6v10H3V10ZM9 20v-6h6v6" />
+      </svg>
+    );
+  }
+  if (name === "logistics") {
+    return (
+      <svg {...common}>
+        <path d="M3 7h11v9H3V7ZM14 11h4l3 3v2h-7v-5Z" />
+        <circle cx="7" cy="18" r="1.4" />
+        <circle cx="17" cy="18" r="1.4" />
+      </svg>
+    );
+  }
+  if (name === "hotel") {
+    return (
+      <svg {...common}>
+        <path d="M4 18V9M4 14h16M20 18v-5a2 2 0 0 0-2-2H9" />
+        <circle cx="7" cy="12" r="1.5" />
+      </svg>
+    );
+  }
+  if (name === "cleaning") {
+    return (
+      <svg {...common}>
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" />
+      </svg>
+    );
+  }
+  if (name === "delivery") {
+    return (
+      <svg {...common}>
+        <path d="M3 8 12 4l9 4-9 4-9-4ZM3 8v8l9 4 9-4V8M12 12v8" />
+      </svg>
+    );
+  }
+  if (name === "office") {
+    return (
+      <svg {...common}>
+        <path d="M5 21V4h9v17M14 9h5v12M8 8h2M8 12h2M8 16h2" />
+      </svg>
+    );
+  }
+  if (name === "customer_service") {
+    return (
+      <svg {...common}>
+        <path d="M4 13a8 8 0 0 1 16 0M4 13v5h3v-5M17 13v5h3v-5M10 20h4" />
+      </svg>
+    );
+  }
+  if (name === "event") {
+    return (
+      <svg {...common}>
+        <path d="M5 6h14v14H5V6ZM5 10h14M8 4v4M16 4v4" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="6" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="12" r="1.3" fill="currentColor" stroke="none" />
     </svg>
   );
 }
