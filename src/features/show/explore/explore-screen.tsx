@@ -354,7 +354,7 @@ export function ExploreScreen() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let timer = 0;
+    const timers: number[] = [];
     const filters = {
       latitude,
       longitude,
@@ -375,13 +375,17 @@ export function ExploreScreen() {
         setLoading(false);
         setSearching(false);
         if (result.items.some((item) => item.status === "UNCHECKED")) {
-          timer = window.setTimeout(() => {
-            getOpportunities(filters, controller.signal)
-              .then((next) => {
-                if (!controller.signal.aborted) setData(next);
-              })
-              .catch(() => undefined);
-          }, 12000);
+          for (const delay of [12000, 28000, 50000]) {
+            timers.push(
+              window.setTimeout(() => {
+                getOpportunities(filters, controller.signal)
+                  .then((next) => {
+                    if (!controller.signal.aborted) setData(next);
+                  })
+                  .catch(() => undefined);
+              }, delay),
+            );
+          }
         }
       })
       .catch((caught: unknown) => {
@@ -393,7 +397,7 @@ export function ExploreScreen() {
       });
     return () => {
       controller.abort();
-      window.clearTimeout(timer);
+      for (const timer of timers) window.clearTimeout(timer);
     };
   }, [filtersKey, reloadKey, latitude, longitude, radiusKm, q, jobType, category, kinds, language, salary, sort]);
 

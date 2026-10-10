@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const defaultApi = process.env.NODE_ENV === "development" ? "http://localhost:4000" : "https://jobrador-b.vercel.app";
+// Local map reads this. Leave JOBRADOR_API_ORIGIN unset to use the API on this machine.
 const apiOrigin = (process.env.JOBRADOR_API_ORIGIN ?? defaultApi).replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {
