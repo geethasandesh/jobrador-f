@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { mapHref } from "@/lib/format";
-import { BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, circleReachesBerlin, DEFAULT_PLACE } from "@/lib/places";
 import { useAuthReady, useSession } from "@/lib/session";
 
 export function LocationSearch() {
@@ -35,6 +35,10 @@ export function LocationSearch() {
     setMessage("Finding your location…");
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!circleReachesBerlin(position.coords.latitude, position.coords.longitude, 5)) {
+          setMessage(BERLIN_ONLY_MESSAGE);
+          return;
+        }
         explore(position.coords.latitude, position.coords.longitude, "Your location");
       },
       () => setMessage("Location was blocked. Pick a Berlin area instead."),

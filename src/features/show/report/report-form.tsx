@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, createLead, searchPlaces } from "@/lib/api/client";
 import { CATEGORY_OPTIONS, LEAD_JOB_TYPE_OPTIONS } from "@/lib/labels";
-import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, BERLIN_PLACES, coversBerlin, DEFAULT_PLACE } from "@/lib/places";
 
 const handwriting = Caveat({ weight: "600", subsets: ["latin"] });
 
@@ -93,8 +93,7 @@ export function ReportForm({
       (position) => {
         const nextLatitude = position.coords.latitude;
         const nextLongitude = position.coords.longitude;
-        const inside = nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
-        if (!inside) {
+        if (!coversBerlin(nextLatitude, nextLongitude)) {
           setError(BERLIN_ONLY_MESSAGE);
           return;
         }

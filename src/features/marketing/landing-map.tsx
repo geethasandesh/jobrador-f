@@ -12,7 +12,7 @@ import { formatDistance, mapHref } from "@/lib/format";
 import { markersFromOpportunities } from "@/lib/map-markers";
 import { categoryLabel, jobTypeLabel, KIND_LABEL, PLACE_CHECKED_EMPTY, PLACE_CHECKING } from "@/lib/labels";
 import { useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
-import { BERLIN_ONLY_MESSAGE, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, circleReachesBerlin, DEFAULT_PLACE } from "@/lib/places";
 import { useAuthReady, useSession } from "@/lib/session";
 
 const statusBar: Record<Kind, { label: string; className: string }> = {
@@ -101,11 +101,11 @@ export function LandingMap() {
     setToast("Searching…");
     void searchPlaces(typed)
       .then((result) => {
-        if (result.outsideBerlin) {
+        const place = result.places.find((item) => circleReachesBerlin(item.latitude, item.longitude, 5));
+        if (!place && (result.outsideBerlin || result.places.length > 0)) {
           setToast(BERLIN_ONLY_MESSAGE);
           return;
         }
-        const place = result.places[0];
         if (!place) {
           setToast("No Berlin place matched that name.");
           return;

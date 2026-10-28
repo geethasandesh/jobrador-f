@@ -36,7 +36,7 @@ import {
 import { removeRouteStop, useClientReady, useRoute, useSavedJobs } from "@/lib/local-lists";
 import { hasSeenGuide, markGuideSeen } from "@/lib/guide";
 import { signOut, useAuthReady, useSession } from "@/lib/session";
-import { BERLIN_ONLY_MESSAGE, DEFAULT_PLACE } from "@/lib/places";
+import { BERLIN_ONLY_MESSAGE, circleReachesBerlin, DEFAULT_PLACE } from "@/lib/places";
 
 const KINDS: Array<{ id: Kind; label: string }> = [
   { id: "job", label: "Jobs" },
@@ -214,6 +214,7 @@ export function ExploreScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [berlinOnly, setBerlinOnly] = useState(false);
   const [jobAlert, setJobAlert] = useState<{
     text: string;
     latitude: number;
@@ -284,8 +285,14 @@ export function ExploreScreen() {
       searchPlaces(query, controller.signal)
         .then((result) => {
           if (controller.signal.aborted) return;
-          setPlaceHits(result.places);
-          if (result.outsideBerlin) setToast(BERLIN_ONLY_MESSAGE);
+          const reach = Number.isFinite(radiusKm) ? radiusKm : 5;
+          const usable = result.places.filter((place) => circleReachesBerlin(place.latitude, place.longitude, reach));
+          if (usable.length === 0 && (result.outsideBerlin || result.places.length > 0)) {
+            setPlaceHits([]);
+            setBerlinOnly(true);
+            return;
+          }
+          setPlaceHits(usable);
         })
         .catch(() => {
           if (!controller.signal.aborted) setPlaceHits([]);
@@ -295,9 +302,15 @@ export function ExploreScreen() {
       controller.abort();
       window.clearTimeout(handle);
     };
-  }, [draftQuery, label]);
+  }, [draftQuery, label, radiusKm]);
 
   function choosePlace(place: SearchPlace) {
+    if (!circleReachesBerlin(place.latitude, place.longitude, Number.isFinite(radiusKm) ? radiusKm : 5)) {
+      setPlaceHits([]);
+      setSearchFocused(false);
+      setBerlinOnly(true);
+      return;
+    }
     setDraftQuery(place.label);
     setPlaceHits([]);
     setSearchFocused(false);
@@ -488,10 +501,9 @@ export function ExploreScreen() {
         setLocating(false);
         const nextLatitude = position.coords.latitude;
         const nextLongitude = position.coords.longitude;
-        const inside =
-          nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
-        if (!inside) {
-          setToast(BERLIN_ONLY_MESSAGE);
+        if (!circleReachesBerlin(nextLatitude, nextLongitude, Number.isFinite(radiusKm) ? radiusKm : 5)) {
+          setToast(null);
+          setBerlinOnly(true);
           return;
         }
         setNotice(null);
@@ -555,12 +567,16 @@ export function ExploreScreen() {
             setToast("Searching…");
             void searchPlaces(query)
               .then((result) => {
-                if (result.outsideBerlin) {
+                const usable = result.places.filter((place) =>
+                  circleReachesBerlin(place.latitude, place.longitude, Number.isFinite(radiusKm) ? radiusKm : 5),
+                );
+                if (usable.length === 0 && (result.outsideBerlin || result.places.length > 0)) {
                   setPlaceHits([]);
-                  setToast(BERLIN_ONLY_MESSAGE);
+                  setToast(null);
+                  setBerlinOnly(true);
                   return;
                 }
-                const place = result.places[0];
+                const place = usable[0];
                 if (!place) {
                   setToast("No Berlin place matched that name.");
                   return;
@@ -738,10 +754,8 @@ export function ExploreScreen() {
           setPanel(null);
         }}
         onPick={(nextLatitude, nextLongitude) => {
-          const inside =
-            nextLatitude >= 52.33 && nextLatitude <= 52.68 && nextLongitude >= 13.05 && nextLongitude <= 13.77;
-          if (!inside) {
-            setToast(BERLIN_ONLY_MESSAGE);
+          if (!circleReachesBerlin(nextLatitude, nextLongitude, Number.isFinite(radiusKm) ? radiusKm : 5)) {
+            setBerlinOnly(true);
             return;
           }
           setNotice(null);
@@ -755,6 +769,18 @@ export function ExploreScreen() {
           });
         }}
       />
+
+      {berlinOnly ? (
+        <div className="absolute inset-0 z-[800] grid place-items-center bg-black/40 px-6" role="dialog" aria-modal="true" aria-labelledby="berlin-only-title">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-xl">
+            <h2 id="berlin-only-title" className="text-xl font-black tracking-tight">Beta, Berlin only</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">{BERLIN_ONLY_MESSAGE}</p>
+            <button type="button" onClick={() => setBerlinOnly(false)} className="mt-5 w-full rounded-full bg-ink py-2.5 text-sm font-semibold text-white">
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="absolute inset-x-3 top-3 z-[700] flex flex-col items-center gap-2 sm:inset-x-24 sm:top-4">
         <MapToast message={toast} />
